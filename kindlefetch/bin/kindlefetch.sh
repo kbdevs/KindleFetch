@@ -14,7 +14,7 @@ get_json_value() {
 ensure_config_dir() {
     config_dir=$(dirname "$CONFIG_FILE")
     if [ ! -d "$config_dir" ]; then
-        mkdir -p "$config_dir")
+        mkdir -p "$config_dir"
     fi
 }
 
