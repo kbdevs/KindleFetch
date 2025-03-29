@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory
 import requests
 from bs4 import BeautifulSoup
 import subprocess
@@ -6,15 +6,11 @@ import os
 import re
 import urllib.parse
 import magic
-import threading
-import time
 
 app = Flask(__name__)
 
 SERVER_DOWNLOAD_DIR = "books/"
 os.makedirs(SERVER_DOWNLOAD_DIR, exist_ok=True)
-
-downloads_in_progress = {}
 
 def sanitize_filename(title):
     filename = re.sub(r'[^\w\-_\. ]', '_', title)
@@ -69,9 +65,18 @@ def search():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def download_file(md5, title, preferred_format, download_id):
+@app.route('/download', methods=['POST'])
+def download():
+    data = request.json
+    if not data or 'md5' not in data or 'title' not in data:
+        return jsonify({"error": "Missing required fields"}), 400
+    
     try:
+        md5 = data['md5']
+        title = data['title']
         clean_title = sanitize_filename(title)
+        preferred_format = data.get('format')
+
         libgen_url = f"https://libgen.li/ads.php?md5={md5}"
         response = requests.get(libgen_url)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -83,28 +88,18 @@ def download_file(md5, title, preferred_format, download_id):
                 break
         
         if not download_link:
-            downloads_in_progress.pop(download_id, None)
-            return {"error": "Download link not found"}, 404
+            return jsonify({"error": "Download link not found"}), 404
         
         temp_filepath = os.path.join(SERVER_DOWNLOAD_DIR, f"temp_{md5}")
         
-        with requests.get(download_link, stream=True) as r:
-            total_length = r.headers.get('content-length')
-            if total_length is None:
-                downloads_in_progress.pop(download_id, None)
-                return {"error": "Failed to get content length"}, 500
-            
-            total_length = int(total_length)
-            downloaded = 0
-            
-            with open(temp_filepath, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=4096):
-                    if download_id not in downloads_in_progress:
-                        return {"error": "Download cancelled"}, 400
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    downloads_in_progress[download_id] = downloaded / total_length * 100
-            
+        subprocess.run([
+            'wget',
+            '-O', temp_filepath,
+            '--user-agent=Mozilla/5.0',
+            '--referer=https://libgen.li/',
+            download_link
+        ], check=True)
+        
         actual_extension = get_actual_file_type(temp_filepath)
         final_extension = preferred_format if preferred_format and (actual_extension == 'bin' or preferred_format == actual_extension) else actual_extension
         
@@ -114,44 +109,16 @@ def download_file(md5, title, preferred_format, download_id):
         os.rename(temp_filepath, final_filepath)
         os.chmod(final_filepath, 0o644)
         
-        downloads_in_progress.pop(download_id, None)
-        return {
+        return jsonify({
             "filename": filename,
             "message": "File downloaded successfully",
             "actual_type": actual_extension,
             "final_extension": final_extension
-        }, 200
+        })
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": f"Download failed: {str(e)}"}), 500
     except Exception as e:
-        downloads_in_progress.pop(download_id, None)
-        return {"error": str(e)}, 500
-
-@app.route('/download', methods=['POST'])
-def download():
-    data = request.json
-    if not data or 'md5' not in data or 'title' not in data:
-        return jsonify({"error": "Missing required fields"}), 400
-    
-    download_id = str(time.time())
-    downloads_in_progress[download_id] = 0
-    
-    threading.Thread(target=download_file, args=(data['md5'], data['title'], data.get('format'), download_id)).start()
-    
-    return jsonify({"download_id": download_id}), 202
-
-@app.route('/progress/<download_id>', methods=['GET'])
-def progress(download_id):
-    if download_id not in downloads_in_progress:
-        return jsonify({"error": "Invalid download ID"}), 404
-    
-    progress = downloads_in_progress[download_id]
-    return jsonify({"progress": progress}), 200
-
-@app.route('/cancel/<download_id>', methods=['DELETE'])
-def cancel_download(download_id):
-    if download_id in downloads_in_progress:
-        downloads_in_progress.pop(download_id, None)
-        return jsonify({"message": "Download cancelled"}), 200
-    return jsonify({"error": "Invalid download ID"}), 404
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/books/<path:filename>')
 def serve_book(filename):
