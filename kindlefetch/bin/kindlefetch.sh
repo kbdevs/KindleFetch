@@ -1,14 +1,16 @@
 #!/bin/sh
 
 # Configuration file path
-CONFIG_FILE="/mnt/us/documents/kindlefetch/bin/kindlefetch_config"
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+CONFIG_FILE="$SCRIPT_DIR/kindlefetch_config"
 
 # Default values
 SERVER_API=""
 KINDLE_DOCUMENTS="/mnt/us/documents"
 
 get_json_value() {
-    echo "$1" | grep -o "\"$2\":\"[^\"]*\"" | sed "s/\"$2\":\"\([^\"]*\)\"/\1/"
+    echo "$1" | grep -o "\"$2\":\"[^\"]*\"" | sed "s/\"$2\":\"\([^\"]*\)\"/\1/" || \
+    echo "$1" | grep -o "\"$2\":[^,}]*" | sed "s/\"$2\":\([^,}]*\)/\1/"
 }
 
 ensure_config_dir() {
@@ -20,7 +22,6 @@ ensure_config_dir() {
 
 # Load configuration if exists
 load_config() {
-    ensure_config_dir
     if [ -f "$CONFIG_FILE" ]; then
         . "$CONFIG_FILE"
     else
@@ -61,7 +62,6 @@ first_time_setup() {
 
 # Save configuration to file
 save_config() {
-    mkdir -p "$(dirname "$CONFIG_FILE")"
     echo "SERVER_API=\"$SERVER_API\"" > "$CONFIG_FILE"
     echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" >> "$CONFIG_FILE"
 }
@@ -125,6 +125,8 @@ display_books() {
  ____) |  __/ (_| | | | (__| | | |
 |_____/ \___|\__,_|_|  \___|_| |_|
 "
+    echo "--------------------------------"
+    echo ""
     count=$(echo "$1" | grep -o '"title":' | wc -l)
     i=0
     
@@ -134,15 +136,31 @@ display_books() {
         author=$(get_json_value "$book_info" "author")
         format=$(get_json_value "$book_info" "format")
         
-        echo "$((i+1)). $title"
-        echo "   by $author${format:+ (format: $format)}"
+        title=$(echo "$title" | sed 's/\\u[0-9a-f]\{4\}//g')
+        
+        printf "%2d. %s\n" $((i+1)) "$title"
+        [ -n "$author" ] && echo "    by $author"
+        [ -n "$format" ] && echo "    Format: $format"
         i=$((i+1))
     done
+    echo ""
+    echo "--------------------------------"
+    echo ""
+    echo "Page $2 of $5"
+    echo ""
+    if [ "$3" = "true" ]; then
+    echo -n "p: Previous page | "
+    fi
+    if [ "$4" = "true" ]; then
+        echo -n "n: Next page | "
+    fi
+    echo -e "1-$count: Select book | q: Quit"
     echo ""
 }
 
 # Local books menu
 list_local_books() {
+    local current_dir="${1:-$KINDLE_DOCUMENTS}"
     clear
     echo -e "
  ____              _        
@@ -152,31 +170,71 @@ list_local_books() {
 | |_) | (_) | (_) |   <\__ \\
 |____/ \___/ \___/|_|\_\___/
 "
+    echo "Current directory: $current_dir"
+    echo "--------------------------------"
+    echo ""
     
     i=1
     > /tmp/kindle_books.list
-    
-    if [ ! -d "$KINDLE_DOCUMENTS" ]; then
-        echo "Error: Documents directory '$KINDLE_DOCUMENTS' does not exist."
+    > /tmp/kindle_folders.list
+
+    if [ ! -d "$current_dir" ]; then
+        echo "Error: Directory '$current_dir' does not exist."
         return 1
     fi
-    
-    for file in "$KINDLE_DOCUMENTS"/*; do
-        case "$file" in
-            *.pdf|*.epub|*.mobi|*.azw3)
-                filename=$(basename "$file")
-                echo "$i. $filename"
-                echo "$filename" >> /tmp/kindle_books.list
-                i=$((i+1))
-                ;;
-        esac
+
+    for item in "$current_dir"/*; do
+        if [ -d "$item" ]; then
+            foldername=$(basename "$item")
+            echo "$i. $foldername/"
+            echo "$item" >> /tmp/kindle_folders.list
+            i=$((i+1))
+        fi
+    done
+
+    for item in "$current_dir"/*; do
+        if [ -f "$item" ]; then
+            filename=$(basename "$item")
+            extension="${filename##*.}"
+            echo "$i. $filename"
+            echo "$item" >> /tmp/kindle_books.list
+            i=$((i+1))
+        fi
     done
     
     if [ $i -eq 1 ]; then
-        echo "No books found in your documents folder."
+        echo "No books or folders found."
         return 1
     fi
+    
     echo ""
+    echo "--------------------------------"
+    echo "n: Go up to parent directory"
+    echo "q: Back to main menu"
+    echo ""
+}
+
+
+delete_book() {
+    index=$1
+    book_file=$(sed -n "${index}p" /tmp/kindle_books.list 2>/dev/null)
+    
+    if [ -z "$book_file" ]; then
+        echo "Invalid selection"
+        return 1
+    fi
+
+    echo -n "Are you sure you want to delete '$book_file'? [y/N] "
+    read confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        if rm -f "$book_file"; then
+            echo "Book deleted successfully"
+        else
+            echo "Failed to delete book"
+        fi
+    else
+        echo "Deletion canceled"
+    fi
 }
 
 delete_book() {
@@ -191,7 +249,7 @@ delete_book() {
     echo -n "Are you sure you want to delete '$book_file'? [y/N] "
     read confirm
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        if rm -f "$KINDLE_DOCUMENTS/$book_file"; then
+        if rm -f "$book_file"; then  # Use the full path from kindle_books.list
             echo "Book deleted successfully"
         else
             echo "Failed to delete book"
@@ -207,15 +265,21 @@ search_books() {
         return 1
     fi
 
-    echo -n "Enter search query: "
-    read query
+    local query="$1"
+    local page="${2:-1}"
     
     if [ -z "$query" ]; then
-        echo "Search query cannot be empty"
-        return 1
+        echo -n "Enter search query: "
+        read query
+        if [ -z "$query" ]; then
+            echo "Search query cannot be empty"
+            return 1
+        fi
     fi
     
-    response=$(curl -s -G "$SERVER_API/search" --data-urlencode "q=$query")
+    echo "Searching for '$query' (page $page)..."
+    
+    response=$(curl -s -G "$SERVER_API/search" --data-urlencode "q=$query" --data-urlencode "page=$page")
     
     if [ $? -ne 0 ]; then
         echo "Error: Failed to connect to server"
@@ -228,16 +292,31 @@ search_books() {
         return 1
     fi
     
-    # Extract results array
     results=$(echo "$response" | sed 's/.*"results":\[\(.*\)\].*/\1/' | sed 's/},{/}\n{/g')
-    
+    current_page=$(echo "$response" | grep -o '"current_page":[0-9]*' | cut -d: -f2)
+    last_page=$(echo "$response" | grep -o '"last_page":[0-9]*' | cut -d: -f2)
+    has_next=$(echo "$response" | grep -o '"has_next":true' | wc -l)
+    has_prev=$(echo "$response" | grep -o '"has_prev":true' | wc -l)
+
+    [ -z "$current_page" ] && current_page=1
+    [ -z "$last_page" ] && last_page=1
+    [ "$has_next" -gt 0 ] && has_next="true" || has_next="false"
+    [ "$has_prev" -gt 0 ] && has_prev="true" || has_prev="false"
+
     if [ -z "$results" ]; then
         echo "No books found!"
         return 1
     fi
     
-    display_books "$results"
-    echo "$results" > /tmp/anna_results.json
+    echo "$query" > /tmp/last_search_query
+    echo "$current_page" > /tmp/last_search_page
+    echo "$last_page" > /tmp/last_search_last_page
+    echo "$has_next" > /tmp/last_search_has_next
+    echo "$has_prev" > /tmp/last_search_has_prev
+    
+    display_books "$results" "$current_page" "$has_prev" "$has_next" "$last_page"
+    echo "$results" > /tmp/search_results.json
+    return 0
 }
 
 download_book() {
@@ -248,12 +327,12 @@ download_book() {
 
     index=$1
     
-    if [ ! -f "/tmp/results.json" ]; then
+    if [ ! -f "/tmp/search_results.json" ]; then
         echo "Error: No search results found"
         return 1
     fi
     
-    book_info=$(awk -v i="$index" 'BEGIN{RS="\\{"; FS="\\}"} NR==i+1{print $1}' /tmp/anna_results.json)
+    book_info=$(awk -v i="$index" 'BEGIN{RS="\\{"; FS="\\}"} NR==i+1{print $1}' /tmp/search_results.json)
     
     if [ -z "$book_info" ]; then
         echo "Invalid selection"
@@ -312,7 +391,7 @@ download_book() {
 
 cleanup() {
     rm -f /tmp/kindle_books.list
-    rm -f /tmp/anna_results.json
+    rm -f /tmp/search_results.json
 }
 
 # Main menu
@@ -343,18 +422,47 @@ v1.0 | https://github.com/justrals/KindleFetch
             1)
                 if search_books; then
                     while true; do
-                        echo -n "Enter book number to download (q to go back): "
+                        query=$(cat /tmp/last_search_query 2>/dev/null)
+                        current_page=$(cat /tmp/last_search_page 2>/dev/null || echo 1)
+                        last_page=$(cat /tmp/last_search_last_page 2>/dev/null || echo 1)
+                        has_next=$(cat /tmp/last_search_has_next 2>/dev/null || echo "false")
+                        has_prev=$(cat /tmp/last_search_has_prev 2>/dev/null || echo "false")
+                        count=$(cat /tmp/search_results.json | grep -o '"title":' | wc -l)
+                        
+                        echo -n "Enter choice: "
                         read book_choice
                         
                         case "$book_choice" in
                             [qQ])
                                 break
                                 ;;
+                            [nN])
+                                if [ "$has_next" = "true" ]; then
+                                    search_books "$query" "$((current_page + 1))"
+                                else
+                                    echo "Already on last page (page $current_page of $last_page)"
+                                    sleep 1
+                                fi
+                                ;;
+                            [pP])
+                                if [ "$has_prev" = "true" ]; then
+                                    search_books "$query" "$((current_page - 1))"
+                                else
+                                    echo "Already on first page (page 1 of $last_page)"
+                                    sleep 1
+                                fi
+                                ;;
                             *)
                                 if echo "$book_choice" | grep -qE '^[0-9]+$'; then
-                                    download_book "$book_choice"
+                                    if [ "$book_choice" -ge 1 ] && [ "$book_choice" -le "$count" ]; then
+                                        download_book "$book_choice"
+                                    else
+                                        echo "Invalid selection (must be between 1 and $count)"
+                                        sleep 1
+                                    fi
                                 else
                                     echo "Invalid input"
+                                    sleep 1
                                 fi
                                 ;;
                         esac
@@ -362,26 +470,46 @@ v1.0 | https://github.com/justrals/KindleFetch
                 fi
                 ;;
             2)
-                if list_local_books; then
-                    while true; do
-                        echo -n "Enter book number to delete (q to go back): "
-                        read book_choice
+                current_dir="$KINDLE_DOCUMENTS"
+                while true; do
+                    if list_local_books "$current_dir"; then
+                        total_items=$(( $(wc -l < /tmp/kindle_folders.list 2>/dev/null) + $(wc -l < /tmp/kindle_books.list 2>/dev/null) ))
                         
-                        case "$book_choice" in
+                        echo -n "Enter choice: "
+                        read choice
+                        
+                        case "$choice" in
                             [qQ])
                                 break
                                 ;;
+                            [nN])
+                                current_dir=$(dirname "$current_dir")
+                                ;;
                             *)
-                                if echo "$book_choice" | grep -qE '^[0-9]+$'; then
-                                    delete_book "$book_choice"
-                                    list_local_books || break
+                                if echo "$choice" | grep -qE '^[0-9]+$'; then
+                                    if [ "$choice" -ge 1 ] && [ "$choice" -le "$total_items" ]; then
+                                        if [ "$choice" -le $(wc -l < /tmp/kindle_folders.list 2>/dev/null) ]; then
+                                            # It's a folder - enter it
+                                            current_dir=$(sed -n "${choice}p" /tmp/kindle_folders.list)
+                                        else
+                                            file_index=$((choice - $(wc -l < /tmp/kindle_folders.list 2>/dev/null)))
+                                            delete_book "$file_index"
+                                        fi
+                                    else
+                                        echo "Invalid selection (must be between 1 and $total_items)"
+                                        sleep 1
+                                    fi
                                 else
                                     echo "Invalid input"
+                                    sleep 1
                                 fi
                                 ;;
                         esac
-                    done
-                fi
+                    else
+                        sleep 2
+                        break
+                    fi
+                done
                 ;;
             3)
                 settings_menu

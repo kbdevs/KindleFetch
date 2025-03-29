@@ -33,11 +33,13 @@ def get_actual_file_type(filepath):
 @app.route('/search', methods=['GET'])
 def search():
     query = request.args.get('q')
+    page = request.args.get('page', '1')
+    
     if not query:
         return jsonify({"error": "Missing query parameter"}), 400
     
     try:
-        url = f"https://annas-archive.org/search?q={urllib.parse.quote(query)}"
+        url = f"https://annas-archive.org/search?q={urllib.parse.quote(query)}&page={page}"
         response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(response.text, 'html.parser')
         books = []
@@ -60,8 +62,41 @@ def search():
                 })
             except:
                 continue
+        
+        pagination = soup.select_one('nav[aria-label="Pagination"]')
+        current_page = 1
+        first_page = 1
+        last_page = 1
+        
+        if pagination:
+            page_links = pagination.select('a:not(.js-pagination-prev-page):not(.js-pagination-next-page)')
+            
+            if page_links:
+                try:
+                    first_page = int(page_links[0].get_text(strip=True))
+                except:
+                    pass
                 
-        return jsonify({"results": books})
+                try:
+                    last_page = int(page_links[-1].get_text(strip=True))
+                except:
+                    pass
+            
+            current_link = pagination.select_one('a[aria-current="page"]')
+            if current_link:
+                try:
+                    current_page = int(current_link.get_text(strip=True))
+                except:
+                    pass
+        
+        return jsonify({
+            "results": books,
+            "current_page": current_page,
+            "first_page": first_page,
+            "last_page": last_page,
+            "has_prev": current_page > first_page,
+            "has_next": current_page < last_page
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
