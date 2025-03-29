@@ -14,7 +14,7 @@ get_json_value() {
 ensure_config_dir() {
     config_dir=$(dirname "$CONFIG_FILE")
     if [ ! -d "$config_dir" ]; then
-        mkdir -p "$config_dir"
+        mkdir -p "$config_dir")
     fi
 }
 
@@ -328,7 +328,7 @@ main_menu() {
 |  < | | '_ \ / _\` | |/ _ \  __/ _ \ __/ __| '_ \\ 
 | . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
 |_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
-
+                                                
 v1.0 | https://github.com/justrals/KindleFetch                                               
 "
         echo "1. Search and download books"
