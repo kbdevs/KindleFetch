@@ -248,7 +248,7 @@ download_book() {
 
     index=$1
     
-    if [ ! -f "/tmp/anna_results.json" ]; then
+    if [ ! -f "/tmp/results.json" ]; then
         echo "Error: No search results found"
         return 1
     fi
