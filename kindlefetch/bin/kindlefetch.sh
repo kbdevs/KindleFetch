@@ -371,6 +371,15 @@ download_book() {
     final_extension=$(get_json_value "$response" "final_extension")
     
     echo "Detected type: $actual_type, saving as .$final_extension"
+
+    if [ ! -d "$KINDLE_DOCUMENTS" ]; then
+        echo "Creating Kindle documents directory: $KINDLE_DOCUMENTS"
+        mkdir -p "$KINDLE_DOCUMENTS"
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to create directory $KINDLE_DOCUMENTS"
+            return 1
+        fi
+    fi
     
     if curl -s -o "$KINDLE_DOCUMENTS/$filename" "$SERVER_API/books/$filename"; then
         echo "Success! Saved to: $KINDLE_DOCUMENTS/$filename"
