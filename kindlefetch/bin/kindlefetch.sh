@@ -20,6 +20,11 @@ ensure_config_dir() {
     fi
 }
 
+cleanup() {
+    rm -f /tmp/kindle_books.list
+    rm -f /tmp/search_results.json
+}
+
 # Load configuration if exists
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
@@ -27,6 +32,12 @@ load_config() {
     else
         first_time_setup
     fi
+}
+
+# Save configuration to file
+save_config() {
+    echo "SERVER_API=\"$SERVER_API\"" > "$CONFIG_FILE"
+    echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" >> "$CONFIG_FILE"
 }
 
 # First time configuration
@@ -58,12 +69,6 @@ first_time_setup() {
     fi
     
     save_config
-}
-
-# Save configuration to file
-save_config() {
-    echo "SERVER_API=\"$SERVER_API\"" > "$CONFIG_FILE"
-    echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" >> "$CONFIG_FILE"
 }
 
 # Settings menu
@@ -212,29 +217,6 @@ list_local_books() {
     echo "n: Go up to parent directory"
     echo "q: Back to main menu"
     echo ""
-}
-
-
-delete_book() {
-    index=$1
-    book_file=$(sed -n "${index}p" /tmp/kindle_books.list 2>/dev/null)
-    
-    if [ -z "$book_file" ]; then
-        echo "Invalid selection"
-        return 1
-    fi
-
-    echo -n "Are you sure you want to delete '$book_file'? [y/N] "
-    read confirm
-    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        if rm -f "$book_file"; then
-            echo "Book deleted successfully"
-        else
-            echo "Failed to delete book"
-        fi
-    else
-        echo "Deletion canceled"
-    fi
 }
 
 delete_book() {
@@ -396,11 +378,6 @@ download_book() {
         echo "Transfer failed"
         return 1
     fi
-}
-
-cleanup() {
-    rm -f /tmp/kindle_books.list
-    rm -f /tmp/search_results.json
 }
 
 # Main menu
