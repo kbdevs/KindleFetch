@@ -446,9 +446,9 @@ main_menu() {
 ${VERSION} | https://github.com/justrals/KindleFetch                                               
 "
         if $UPDATE_AVAILABLE; then
-            echo -e "Update available! Select option 5 to install.\033[0m"
+            echo "Update available! Select option 5 to install."
+            echo ""
         fi
-        echo ""
         echo "1. Search and download books"
         echo "2. List my books"
         echo "3. Settings"
