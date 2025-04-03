@@ -3,6 +3,7 @@
 # Configuration file path
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 CONFIG_FILE="$SCRIPT_DIR/kindlefetch_config"
+VERSION_FILE="$SCRIPT_DIR/version"
 
 # Default values
 SERVER_API=""
@@ -33,6 +34,16 @@ load_config() {
         first_time_setup
     fi
 }
+
+load_version() {
+    if [ -f "$VERSION_FILE" ]; then
+        cat "$VERSION_FILE"
+    else
+        echo "Version file wasn't found!"
+    fi
+}
+
+VERSION=$(load_version)
 
 # Save configuration to file
 save_config() {
@@ -418,7 +429,7 @@ main_menu() {
 | . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
 |_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
                                                 
-v1.0 | https://github.com/justrals/KindleFetch                                               
+${VERSION} | https://github.com/justrals/KindleFetch                                               
 "
         echo "1. Search and download books"
         echo "2. List my books"
