@@ -9,12 +9,32 @@ if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon
 fi
 
 # Variables
-REPO_URL="https://github.com/justrals/KindleFetch/archive/refs/heads/dev.zip"
+REPO="justrals/KindleFetch"
+API_URL="https://api.github.com/repos/${REPO}/commits"
+REPO_URL="https://github.com/${REPO}/archive/refs/heads/dev.zip"
 ZIP_FILE="repo.zip"
 EXTRACTED_DIR="KindleFetch-dev"
 INSTALL_DIR="/mnt/us/extensions/kindlefetch"
 CONFIG_FILE="$INSTALL_DIR/bin/kindlefetch_config"
+VERSION_FILE="$INSTALL_DIR/bin/version"
 TEMP_CONFIG="/tmp/kindlefetch_config_backup"
+
+get_version() {
+    api_response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_URL") || {
+        echo "Warning: Failed to fetch version from GitHub API" >&2
+        echo "unknown"
+        return
+    }
+    
+    commit_count=$(echo "$api_response" | grep -o '"sha":' | wc -l)
+    latest_sha=$(echo "$api_response" | grep -m1 '"sha":' | cut -d'"' -f4 | cut -c1-7)
+    
+    if [ -n "$latest_sha" ]; then
+        echo "${commit_count}-${latest_sha}"
+    else
+        echo "$commit_count"
+    fi
+}
 
 # Backup existing config
 if [ -f "$CONFIG_FILE" ]; then
@@ -39,8 +59,15 @@ rm -rf "$INSTALL_DIR"
 
 # Install
 echo "Installing KindleFetch..."
-mv -f "$EXTRACTED_DIR/kindlefetch" "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR"
+mv -f "$EXTRACTED_DIR/kindlefetch"/* "$INSTALL_DIR/"
 echo "Installation successful."
+
+# Create version file
+echo "Creating version file..."
+VERSION="$(get_version)-dev"
+mkdir -p "$INSTALL_DIR/bin"
+echo "$VERSION" > "$VERSION_FILE"
 
 # Restore config
 if [ -f "$TEMP_CONFIG" ]; then
@@ -52,4 +79,4 @@ fi
 echo "Cleaning up..."
 rm -rf "$EXTRACTED_DIR"
 
-echo "KindleFetch installation completed successfully."
+echo "KindleFetch installation completed successfully. Version: $VERSION"

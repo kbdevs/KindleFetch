@@ -3,10 +3,13 @@
 # Configuration file path
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 CONFIG_FILE="$SCRIPT_DIR/kindlefetch_config"
+VERSION_FILE="$SCRIPT_DIR/version"
 
-# Default values
+# Default config values
 SERVER_API=""
 KINDLE_DOCUMENTS="/mnt/us/documents"
+
+UPDATE_AVAILABLE=false
 
 get_json_value() {
     echo "$1" | grep -o "\"$2\":\"[^\"]*\"" | sed "s/\"$2\":\"\([^\"]*\)\"/\1/" || \
@@ -31,6 +34,27 @@ load_config() {
         . "$CONFIG_FILE"
     else
         first_time_setup
+    fi
+}
+
+load_version() {
+    if [ -f "$VERSION_FILE" ]; then
+        cat "$VERSION_FILE"
+    else
+        echo "Version file wasn't found!"
+    fi
+}
+
+VERSION=$(load_version)
+
+check_for_updates() {
+    local current_version=$(load_version)
+    local remote_version=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/justrals/KindleFetch/commits" | \
+        grep -o '"sha":' | wc -l)
+    
+    if [ -n "$remote_version" ] && [ "$remote_version" -gt "${current_version%%-*}" ]; then
+        UPDATE_AVAILABLE=true
     fi
 }
 
@@ -407,6 +431,7 @@ download_book() {
 # Main menu
 main_menu() {
     load_config
+    check_for_updates
     
     while true; do
         clear
@@ -418,12 +443,19 @@ main_menu() {
 | . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
 |_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
                                                 
-v1.0 | https://github.com/justrals/KindleFetch                                               
+${VERSION} | https://github.com/justrals/KindleFetch                                               
 "
+        if $UPDATE_AVAILABLE; then
+            echo -e "Update available! Select option 5 to install.\033[0m"
+        fi
+        echo ""
         echo "1. Search and download books"
         echo "2. List my books"
         echo "3. Settings"
         echo "4. Exit"
+        if $UPDATE_AVAILABLE; then
+            echo "5. Install update"
+        fi
         echo ""
         echo -n "Choose option: "
         read choice
@@ -538,6 +570,23 @@ v1.0 | https://github.com/justrals/KindleFetch
             4)
                 cleanup
                 exit 0
+                ;;
+            5)
+                if $UPDATE_AVAILABLE; then
+                    echo "Installing update..."
+                    if curl https://justrals.github.io/KindleFetch/install/install_kindle.sh | sh; then
+                        echo "Update installed successfully!"
+                        UPDATE_AVAILABLE=false
+                        VERSION=$(load_version)
+                        sleep 2
+                    else
+                        echo "Failed to install update"
+                        sleep 2
+                    fi
+                else
+                    echo "No update available"
+                    sleep 1
+                fi
                 ;;
             *)
                 echo "Invalid option"
