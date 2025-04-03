@@ -215,6 +215,7 @@ list_local_books() {
     echo ""
     echo "--------------------------------"
     echo "n: Go up to parent directory"
+    echo "d: Delete directory"
     echo "q: Back to main menu"
     echo ""
 }
@@ -231,10 +232,32 @@ delete_book() {
     echo -n "Are you sure you want to delete '$book_file'? [y/N] "
     read confirm
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        if rm -f "$book_file"; then  # Use the full path from kindle_books.list
+        if rm -f "$book_file"; then
             echo "Book deleted successfully"
         else
             echo "Failed to delete book"
+        fi
+    else
+        echo "Deletion canceled"
+    fi
+}
+
+delete_directory() {
+    index=$1
+    dir_path=$(sed -n "${index}p" /tmp/kindle_folders.list 2>/dev/null)
+    
+    if [ -z "$dir_path" ]; then
+        echo "Invalid selection"
+        return 1
+    fi
+
+    echo -n "Are you sure you want to delete '$dir_path' and all its contents? [y/N] "
+    read confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        if rm -rf "$dir_path"; then
+            echo "Directory deleted successfully"
+        else
+            echo "Failed to delete directory"
         fi
     else
         echo "Deletion canceled"
@@ -349,10 +372,9 @@ download_book() {
     fi
     
     filename=$(get_json_value "$response" "filename")
-    actual_type=$(get_json_value "$response" "actual_type")
-    final_extension=$(get_json_value "$response" "final_extension")
-    
-    echo "Detected type: $actual_type, saving as .$final_extension"
+    filename_without_type=${filename%.*}
+
+    echo "$title is almost done transferring to your Kindle!"
 
     if [ ! -d "$KINDLE_DOCUMENTS" ]; then
         echo "Creating Kindle documents directory: $KINDLE_DOCUMENTS"
@@ -362,8 +384,10 @@ download_book() {
             return 1
         fi
     fi
-    
-    if curl -s -o "$KINDLE_DOCUMENTS/$filename" "$SERVER_API/books/$filename"; then
+
+    mkdir "$KINDLE_DOCUMENTS/$filename_without_type"
+
+    if curl -s -o "$KINDLE_DOCUMENTS/$filename_without_type/$filename" "$SERVER_API/books/$filename"; then
         echo "Success! Saved to: $KINDLE_DOCUMENTS/$filename"
     
         delete_response=$(curl -s -X POST "$SERVER_API/delete" \
@@ -471,11 +495,22 @@ v1.0 | https://github.com/justrals/KindleFetch
                             [nN])
                                 current_dir=$(dirname "$current_dir")
                                 ;;
+                            [dD])
+                                echo -n "Enter directory number to delete: "
+                                read dir_num
+                                if echo "$dir_num" | grep -qE '^[0-9]+$'; then
+                                    if [ "$dir_num" -le $(wc -l < /tmp/kindle_folders.list 2>/dev/null) ]; then
+                                        delete_directory "$dir_num"
+                                    else
+                                        echo "Invalid directory number"
+                                        sleep 1
+                                    fi
+                                fi
+                                ;;
                             *)
                                 if echo "$choice" | grep -qE '^[0-9]+$'; then
                                     if [ "$choice" -ge 1 ] && [ "$choice" -le "$total_items" ]; then
                                         if [ "$choice" -le $(wc -l < /tmp/kindle_folders.list 2>/dev/null) ]; then
-                                            # It's a folder - enter it
                                             current_dir=$(sed -n "${choice}p" /tmp/kindle_folders.list)
                                         else
                                             file_index=$((choice - $(wc -l < /tmp/kindle_folders.list 2>/dev/null)))
