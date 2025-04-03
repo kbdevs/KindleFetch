@@ -7,7 +7,7 @@ Simple CLI for downloading books to your Kindle without a computer.
 ## Prerequisites
 
 **Your Kindle must be jailbroken before proceeding!**  
-If it's not, follow [this comprehensive guide](https://kindlemodding.org/) first.
+If it's not, follow [this guide](https://kindlemodding.org/) first.
 
 ## Installation
 
