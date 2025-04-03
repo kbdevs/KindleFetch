@@ -2,3 +2,5 @@
 books/
 .env
 kindlefetch_config
+.vscode
+.idea
