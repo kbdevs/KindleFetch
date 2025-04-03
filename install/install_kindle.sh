@@ -9,15 +9,14 @@ if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon
 fi
 
 # Variables
-REPO="justrals/KindleFetch"
-API_URL="https://api.github.com/repos/${REPO}/commits"
-REPO_URL="https://github.com/${REPO}/archive/refs/heads/main.zip"
-ZIP_FILE="repo.zip"
-EXTRACTED_DIR="KindleFetch-main"
+API_URL="https://api.github.com/repos/justrals/KindleFetch/commits"
+REPO_URL="https://github.com/justrals/KindleFetch/archive/refs/heads/main.zip"
+ZIP_FILE="/mnt/us/repo.zip"
+EXTRACTED_DIR="/mnt/us/KindleFetch-main"
 INSTALL_DIR="/mnt/us/extensions/kindlefetch"
 CONFIG_FILE="$INSTALL_DIR/bin/kindlefetch_config"
 VERSION_FILE="$INSTALL_DIR/bin/version"
-TEMP_CONFIG="/tmp/kindlefetch_config_backup"
+TEMP_CONFIG="/mnt/us/kindlefetch_config_backup"
 
 get_version() {
     api_response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_URL") || {
@@ -49,7 +48,7 @@ echo "Download complete."
 
 # Extract files
 echo "Extracting files..."
-unzip -o "$ZIP_FILE"
+unzip -o "$ZIP_FILE" -d "/mnt/us"
 echo "Extraction complete."
 rm -f "$ZIP_FILE"
 
