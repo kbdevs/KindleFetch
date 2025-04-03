@@ -1,3 +1,7 @@
+<img src="https://github.com/user-attachments/assets/f0769d12-61dd-4f2f-91e0-79f8b0a302bb" height="300px">
+<img src="https://github.com/user-attachments/assets/e9a2dd94-7a63-4472-9b0b-cfc00763e628" height="300px">
+<img src="https://github.com/user-attachments/assets/31ec799c-c2be-4701-99d9-b6085b896729" height="300px">
+
 # KindleFetch
 
 Simple CLI for downloading books to your Kindle without a computer.
