@@ -215,7 +215,7 @@ list_local_books() {
     echo ""
     echo "--------------------------------"
     echo "n: Go up to parent directory"
-    echo "d: Directory deletion mode"
+    echo "d: Delete directory"
     echo "q: Back to main menu"
     echo ""
 }
