@@ -1,6 +1,6 @@
-<img src="https://github.com/user-attachments/assets/f0769d12-61dd-4f2f-91e0-79f8b0a302bb" width="30vw">
-<img src="https://github.com/user-attachments/assets/e9a2dd94-7a63-4472-9b0b-cfc00763e628" width="30vw">
-<img src="https://github.com/user-attachments/assets/31ec799c-c2be-4701-99d9-b6085b896729" width="30vw">
+<img src="https://github.com/user-attachments/assets/f0769d12-61dd-4f2f-91e0-79f8b0a302bb" width="150vw">
+<img src="https://github.com/user-attachments/assets/e9a2dd94-7a63-4472-9b0b-cfc00763e628" width="150vw">
+<img src="https://github.com/user-attachments/assets/31ec799c-c2be-4701-99d9-b6085b896729" width="150vw">
 
 # KindleFetch
 
