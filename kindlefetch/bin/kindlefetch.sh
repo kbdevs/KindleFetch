@@ -349,10 +349,9 @@ download_book() {
     fi
     
     filename=$(get_json_value "$response" "filename")
-    actual_type=$(get_json_value "$response" "actual_type")
-    final_extension=$(get_json_value "$response" "final_extension")
-    
-    echo "Detected type: $actual_type, saving as .$final_extension"
+    filename_without_type=${filename%.*}
+
+    echo "$filename_without_type is almost transfered to your Kindle!"
 
     if [ ! -d "$KINDLE_DOCUMENTS" ]; then
         echo "Creating Kindle documents directory: $KINDLE_DOCUMENTS"
@@ -362,8 +361,10 @@ download_book() {
             return 1
         fi
     fi
-    
-    if curl -s -o "$KINDLE_DOCUMENTS/$filename" "$SERVER_API/books/$filename"; then
+
+    mkdir "$KINDLE_DOCUMENTS/$filename_without_type"
+
+    if curl -s -o "$KINDLE_DOCUMENTS/$filename_without_type/$filename" "$SERVER_API/books/$filename"; then
         echo "Success! Saved to: $KINDLE_DOCUMENTS/$filename"
     
         delete_response=$(curl -s -X POST "$SERVER_API/delete" \
