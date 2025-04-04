@@ -11,6 +11,12 @@ KINDLE_DOCUMENTS="/mnt/us/documents"
 
 UPDATE_AVAILABLE=false
 
+# Check if running on a Kindle
+if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon" >/dev/null; }; then
+    echo "Error: This script must run on a Kindle device." >&2
+    exit 1
+fi
+
 get_json_value() {
     echo "$1" | grep -o "\"$2\":\"[^\"]*\"" | sed "s/\"$2\":\"\([^\"]*\)\"/\1/" || \
     echo "$1" | grep -o "\"$2\":[^,}]*" | sed "s/\"$2\":\([^,}]*\)/\1/"
@@ -150,7 +156,7 @@ settings_menu() {
                             echo "Failed to install update"
                             sleep 2
                         fi
-                    esac
+                    fi
                 else
                     echo "You're up-to-date!"
                 fi
