@@ -45,8 +45,6 @@ load_version() {
     fi
 }
 
-VERSION=$(load_version)
-
 check_for_updates() {
     local current_version=$(load_version)
     local remote_version=$(curl -s -H "Accept: application/vnd.github.v3+json" \
@@ -112,7 +110,8 @@ settings_menu() {
         echo "Current configuration:"
         echo "1. Server API URL: ${SERVER_API:-[not set]}"
         echo "2. Documents directory: $KINDLE_DOCUMENTS"
-        echo "3. Back to main menu"
+        echo "3. Check for updates"
+        echo "4. Back to main menu"
         echo ""
         echo -n "Choose option: "
         read choice
@@ -132,7 +131,29 @@ settings_menu() {
                     save_config
                 fi
                 ;;
-            3)
+            3)  
+                check_for_updates
+                if [$UPDATE_AVAILABLE]; then
+                    echo "Update is available! Would you like to update? [y/N]: "
+                    read confirm
+
+                    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+                        echo "Installing update..."
+                        if curl https://justrals.github.io/KindleFetch/install/install_kindle.sh | sh; then
+                            echo "Update installed successfully!"
+                            UPDATE_AVAILABLE=false
+                            VERSION=$(load_version)
+                            sleep 2
+                        else
+                            echo "Failed to install update"
+                            sleep 2
+                        fi
+                    esac
+                else
+                    echo "You're up-to-date!"
+                fi
+                ;;
+            4)
                 break
                 ;;
             *)
@@ -443,7 +464,7 @@ main_menu() {
 | . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
 |_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
                                                 
-${VERSION} | https://github.com/justrals/KindleFetch                                               
+${load_version} | https://github.com/justrals/KindleFetch                                               
 "
         if $UPDATE_AVAILABLE; then
             echo "Update available! Select option 5 to install."
