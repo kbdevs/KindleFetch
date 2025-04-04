@@ -52,19 +52,18 @@ load_version() {
 }
 
 check_for_updates() {
-    local current_version=$(load_version)
-    local cache_buster=$(date +%s)
-    local remote_version=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-        -H "Cache-Control: no-cache, no-store, must-revalidate" \
-        -H "Pragma: no-cache" \
-        -H "Expires: 0" \
-        "https://api.github.com/repos/justrals/KindleFetch/commits?per_page=1&t=$cache_buster" | \
-        grep -oE '"sha": "[0-9a-f]{40}"' | head -1 | cut -d'"' -f4)
+    local current_sha=$(load_version)
     
-    if [ -n "$remote_version" ] && [ "${#remote_version}" -gt 0 ]; then
-        if [ "$(compare_versions "$current_version" "$remote_version")" -eq 1 ]; then
-            UPDATE_AVAILABLE=true
-        fi
+    local latest_sha=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+        -H "Cache-Control: no-cache" \
+        "https://api.github.com/repos/justrals/KindleFetch/commits?per_page=1" | \
+        grep -oE '"sha": "[0-9a-f]+"' | head -1 | cut -d'"' -f4 | cut -c1-7)
+    
+    if [ -n "$latest_sha" ] && [ "$current_sha" != "$latest_sha" ]; then
+        UPDATE_AVAILABLE=true
+        return 0
+    else
+        return 1
     fi
 }
 
@@ -145,13 +144,13 @@ settings_menu() {
                 ;;
             3)  
                 check_for_updates
-                if [$UPDATE_AVAILABLE]; then
+                if ["$UPDATE_AVAILABLE" = true]; then
                     echo "Update is available! Would you like to update? [y/N]: "
                     read confirm
 
                     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
                         echo "Installing update..."
-                        if curl https://justrals.github.io/KindleFetch/install/install_kindle.sh | sh; then
+                        if curl -s https://justrals.github.io/KindleFetch/install/install_kindle.sh | sh; then
                             echo "Update installed successfully!"
                             UPDATE_AVAILABLE=false
                             VERSION=$(load_version)
@@ -608,7 +607,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
             5)
                 if $UPDATE_AVAILABLE; then
                     echo "Installing update..."
-                    if curl https://justrals.github.io/KindleFetch/install/install_kindle.sh | sh; then
+                    if curl -s https://justrals.github.io/KindleFetch/install/install_kindle.sh | sh; then
                         echo "Update installed successfully!"
                         UPDATE_AVAILABLE=false
                         VERSION=$(load_version)
