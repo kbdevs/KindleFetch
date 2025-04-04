@@ -48,8 +48,10 @@ load_version() {
 check_for_updates() {
     local current_version=$(load_version)
     local remote_version=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/justrals/KindleFetch/commits" | \
-        grep -o '"sha":' | wc -l)
+        -H "Cache-Control: no-cache" \
+        -H "Pragma: no-cache" \
+        "https://api.github.com/repos/justrals/KindleFetch/commits?per_page=1" | \
+        jq -r '.[0].sha' | wc -c)
     
     if [ -n "$remote_version" ] && [ "$remote_version" -gt "${current_version%%-*}" ]; then
         UPDATE_AVAILABLE=true
