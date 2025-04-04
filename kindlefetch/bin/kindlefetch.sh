@@ -53,14 +53,18 @@ load_version() {
 
 check_for_updates() {
     local current_version=$(load_version)
+    local cache_buster=$(date +%s)
     local remote_version=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-        -H "Cache-Control: no-cache" \
+        -H "Cache-Control: no-cache, no-store, must-revalidate" \
         -H "Pragma: no-cache" \
-        "https://api.github.com/repos/justrals/KindleFetch/commits?per_page=1" | \
-        jq -r '.[0].sha' | wc -c)
+        -H "Expires: 0" \
+        "https://api.github.com/repos/justrals/KindleFetch/commits?per_page=1&t=$cache_buster" | \
+        grep -oE '"sha": "[0-9a-f]{40}"' | head -1 | cut -d'"' -f4)
     
-    if [ -n "$remote_version" ] && [ "$remote_version" -gt "${current_version%%-*}" ]; then
-        UPDATE_AVAILABLE=true
+    if [ -n "$remote_version" ] && [ "${#remote_version}" -gt 0 ]; then
+        if [ "$(compare_versions "$current_version" "$remote_version")" -eq 1 ]; then
+            UPDATE_AVAILABLE=true
+        fi
     fi
 }
 
@@ -472,7 +476,7 @@ main_menu() {
 | . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
 |_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
                                                 
-${load_version} | https://github.com/justrals/KindleFetch                                               
+$(load_version) | https://github.com/justrals/KindleFetch                                               
 "
         if $UPDATE_AVAILABLE; then
             echo "Update available! Select option 5 to install."
