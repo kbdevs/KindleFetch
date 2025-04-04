@@ -163,6 +163,7 @@ settings_menu() {
                     fi
                 else
                     echo "You're up-to-date!"
+                    sleep 2
                 fi
                 ;;
             4)
