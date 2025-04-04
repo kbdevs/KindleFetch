@@ -2,7 +2,7 @@
 
 # KindleFetch
 
-Simple CLI for downloading books to your Kindle without a computer.
+Simple CLI for downloading books from [Anna's Archive](https://annas-archive.org/) directly to your Kindle without a computer.
 
 ## Prerequisites
 
