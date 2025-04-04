@@ -30,8 +30,10 @@ ensure_config_dir() {
 }
 
 cleanup() {
-    rm -f /tmp/kindle_books.list
-    rm -f /tmp/search_results.json
+    rm -f /tmp/kindle_books.list \
+          /tmp/kindle_folders.list \
+          /tmp/search_results.json \
+          /tmp/last_search_*
 }
 
 # Load configuration if exists
@@ -144,7 +146,7 @@ settings_menu() {
                 ;;
             3)  
                 check_for_updates
-                if ["$UPDATE_AVAILABLE" = true]; then
+                if [ "$UPDATE_AVAILABLE" = true ]; then
                     echo "Update is available! Would you like to update? [y/N]: "
                     read confirm
 
