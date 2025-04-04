@@ -24,14 +24,11 @@ get_version() {
         echo "unknown"
         return
     }
-    
-    commit_count=$(echo "$api_response" | grep -o '"sha":' | wc -l)
+
     latest_sha=$(echo "$api_response" | grep -m1 '"sha":' | cut -d'"' -f4 | cut -c1-7)
     
     if [ -n "$latest_sha" ]; then
-        echo "${commit_count}-${latest_sha}"
-    else
-        echo "$commit_count"
+        echo "${latest_sha}"
     fi
 }
 
@@ -43,7 +40,7 @@ fi
 
 # Download repository
 echo "Downloading KindleFetch..."
-curl -L -o "$ZIP_FILE" "$REPO_URL"
+curl -s -L -o "$ZIP_FILE" "$REPO_URL"
 echo "Download complete."
 
 # Extract files
