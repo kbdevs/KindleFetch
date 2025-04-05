@@ -4,3 +4,4 @@ books/
 kindlefetch_config
 .vscode
 .idea
+venv/
