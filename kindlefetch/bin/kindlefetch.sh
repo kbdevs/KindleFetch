@@ -606,7 +606,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
                 cleanup
                 exit 0
                 ;;
-            5)
+            5)  
                 if $UPDATE_AVAILABLE; then
                     echo "Installing update..."
                     if curl -s https://justrals.github.io/KindleFetch/install/install_kindle.sh | sh; then
@@ -618,9 +618,6 @@ $(load_version) | https://github.com/justrals/KindleFetch
                         echo "Failed to install update"
                         sleep 2
                     fi
-                else
-                    echo "No update available"
-                    sleep 1
                 fi
                 ;;
             *)
