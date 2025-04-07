@@ -1,11 +1,10 @@
 #!/bin/sh
 
-# Configuration file path
+# Variables
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-CONFIG_FILE="$SCRIPT_DIR/kindlefetch_config"
-VERSION_FILE="$SCRIPT_DIR/version"
+CONFIG_FILE="$SCRIPT_DIR/.kindlefetch_config"
+VERSION_FILE="$SCRIPT_DIR/.version"
 
-# Default config values
 SERVER_API=""
 KINDLE_DOCUMENTS="/mnt/us/documents"
 
@@ -36,7 +35,6 @@ cleanup() {
           /tmp/last_search_*
 }
 
-# Load configuration if exists
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
         . "$CONFIG_FILE"
@@ -45,11 +43,27 @@ load_config() {
     fi
 }
 
+get_version() {
+    api_response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_URL") || {
+        echo "Warning: Failed to fetch version from GitHub API" >&2
+        echo "unknown"
+        return
+    }
+
+    latest_sha=$(echo "$api_response" | grep -m1 '"sha":' | cut -d'"' -f4 | cut -c1-7)
+    
+    echo "$latest_sha" > "$VERSION_FILE"
+}
+
 load_version() {
     if [ -f "$VERSION_FILE" ]; then
         cat "$VERSION_FILE"
     else
         echo "Version file wasn't found!"
+        sleep 2
+        echo "Сreating version file"
+        sleep 2
+        get_version
     fi
 }
 
@@ -69,7 +83,6 @@ check_for_updates() {
     fi
 }
 
-# Save configuration to file
 save_config() {
     echo "SERVER_API=\"$SERVER_API\"" > "$CONFIG_FILE"
     echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" >> "$CONFIG_FILE"
@@ -172,7 +185,7 @@ settings_menu() {
                 ;;
             *)
                 echo "Invalid option"
-                sleep 1
+                sleep 2
                 ;;
         esac
     done
@@ -518,7 +531,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                     search_books "$query" "$((current_page + 1))"
                                 else
                                     echo "Already on last page (page $current_page of $last_page)"
-                                    sleep 1
+                                    sleep 2
                                 fi
                                 ;;
                             [pP])
@@ -526,7 +539,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                     search_books "$query" "$((current_page - 1))"
                                 else
                                     echo "Already on first page (page 1 of $last_page)"
-                                    sleep 1
+                                    sleep 2
                                 fi
                                 ;;
                             *)
@@ -535,11 +548,11 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                         download_book "$book_choice"
                                     else
                                         echo "Invalid selection (must be between 1 and $count)"
-                                        sleep 1
+                                        sleep 2
                                     fi
                                 else
                                     echo "Invalid input"
-                                    sleep 1
+                                    sleep 2
                                 fi
                                 ;;
                         esac
@@ -570,7 +583,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                         delete_directory "$dir_num"
                                     else
                                         echo "Invalid directory number"
-                                        sleep 1
+                                        sleep 2
                                     fi
                                 fi
                                 ;;
@@ -585,11 +598,11 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                         fi
                                     else
                                         echo "Invalid selection (must be between 1 and $total_items)"
-                                        sleep 1
+                                        sleep 2
                                     fi
                                 else
                                     echo "Invalid input"
-                                    sleep 1
+                                    sleep 2
                                 fi
                                 ;;
                         esac
@@ -622,7 +635,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
                 ;;
             *)
                 echo "Invalid option"
-                sleep 1
+                sleep 2
                 ;;
         esac
     done
