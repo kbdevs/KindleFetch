@@ -5,7 +5,6 @@ SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 CONFIG_FILE="$SCRIPT_DIR/.kindlefetch_config"
 VERSION_FILE="$SCRIPT_DIR/.version"
 
-SERVER_API=""
 KINDLE_DOCUMENTS="/mnt/us/documents"
 
 UPDATE_AVAILABLE=false
@@ -15,6 +14,10 @@ if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon
     echo "Error: This script must run on a Kindle device." >&2
     exit 1
 fi
+
+sanitize_filename() {
+    echo "$1" | sed -e 's/[^[:alnum:]\._-]/_/g' -e 's/ /_/g'
+}
 
 get_json_value() {
     echo "$1" | grep -o "\"$2\":\"[^\"]*\"" | sed "s/\"$2\":\"\([^\"]*\)\"/\1/" || \
@@ -44,7 +47,7 @@ load_config() {
 }
 
 get_version() {
-    api_response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_URL") || {
+    api_response=$(curl -s -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/justrals/KindleFetch/commits") || {
         echo "Warning: Failed to fetch version from GitHub API" >&2
         echo "unknown"
         return
@@ -84,8 +87,7 @@ check_for_updates() {
 }
 
 save_config() {
-    echo "SERVER_API=\"$SERVER_API\"" > "$CONFIG_FILE"
-    echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" >> "$CONFIG_FILE"
+    echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" > "$CONFIG_FILE"
 }
 
 # First time configuration
@@ -103,12 +105,6 @@ first_time_setup() {
 "
     echo "Welcome to KindleFetch! Let's set up your configuration."
     echo ""
-    
-    echo -n "Enter your server API URL [example: http://161.128.167.197:5000]: "
-    read user_input
-    if [ -n "$user_input" ]; then
-        SERVER_API="$user_input"
-    fi
     
     echo -n "Enter your Kindle documents directory [default: $KINDLE_DOCUMENTS]: "
     read user_input
@@ -134,22 +130,15 @@ settings_menu() {
                              |___/     
 "
         echo "Current configuration:"
-        echo "1. Server API URL: ${SERVER_API:-[not set]}"
-        echo "2. Documents directory: $KINDLE_DOCUMENTS"
-        echo "3. Check for updates"
-        echo "4. Back to main menu"
+        echo "1. Documents directory: $KINDLE_DOCUMENTS"
+        echo "2. Check for updates"
+        echo "3. Back to main menu"
         echo ""
         echo -n "Choose option: "
         read choice
         
         case "$choice" in
             1)
-                echo -n "Enter new server API URL: "
-                read new_url
-                SERVER_API="$new_url"
-                save_config
-                ;;
-            2)
                 echo -n "Enter new documents directory: "
                 read new_dir
                 if [ -n "$new_dir" ]; then
@@ -157,7 +146,7 @@ settings_menu() {
                     save_config
                 fi
                 ;;
-            3)  
+            2)  
                 check_for_updates
                 if [ "$UPDATE_AVAILABLE" = true ]; then
                     echo "Update is available! Would you like to update? [y/N]: "
@@ -180,7 +169,7 @@ settings_menu() {
                     sleep 2
                 fi
                 ;;
-            4)
+            3)
                 break
                 ;;
             *)
@@ -204,34 +193,35 @@ display_books() {
 "
     echo "--------------------------------"
     echo ""
+    
     count=$(echo "$1" | grep -o '"title":' | wc -l)
     i=0
-    
     while [ $i -lt $count ]; do
         book_info=$(echo "$1" | awk -v i=$i 'BEGIN{RS="\\{"; FS="\\}"} NR==i+2{print $1}')
         title=$(get_json_value "$book_info" "title")
         author=$(get_json_value "$book_info" "author")
         format=$(get_json_value "$book_info" "format")
         
-        title=$(echo "$title" | sed 's/\\u[0-9a-f]\{4\}//g')
-        
         printf "%2d. %s\n" $((i+1)) "$title"
         [ -n "$author" ] && echo "    by $author"
         [ -n "$format" ] && echo "    Format: $format"
+        
         i=$((i+1))
     done
+    
     echo ""
     echo "--------------------------------"
     echo ""
     echo "Page $2 of $5"
     echo ""
+    
     if [ "$3" = "true" ]; then
-    echo -n "p: Previous page | "
+        echo -n "p: Previous page | "
     fi
     if [ "$4" = "true" ]; then
         echo -n "n: Next page | "
     fi
-    echo -e "1-$count: Select book | q: Quit"
+    echo "1-$count: Select book | q: Quit"
     echo ""
 }
 
@@ -337,143 +327,202 @@ delete_directory() {
 }
 
 search_books() {
-    if [ -z "$SERVER_API" ]; then
-        echo "Error: Server API URL is not configured."
-        return 1
-    fi
-
     local query="$1"
     local page="${2:-1}"
     
     if [ -z "$query" ]; then
         echo -n "Enter search query: "
         read query
-        if [ -z "$query" ]; then
+        [ -z "$query" ] && {
             echo "Search query cannot be empty"
             return 1
-        fi
+        }
     fi
     
     echo "Searching for '$query' (page $page)..."
     
-    response=$(curl -s -G "$SERVER_API/search" --data-urlencode "q=$query" --data-urlencode "page=$page")
+    encoded_query=$(echo "$query" | sed 's/ /+/g')
+    search_url="https://annas-archive.org/search?q=${encoded_query}&page=${page}"
     
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to connect to server"
-        return 1
-    fi
+    local html_content=$(curl -s -H "User-Agent: Mozilla/5.0" "$search_url")
     
-    error=$(get_json_value "$response" "error")
-    if [ -n "$error" ]; then
-        echo "Error: $error"
-        return 1
-    fi
-    
-    results=$(echo "$response" | sed 's/.*"results":\[\(.*\)\].*/\1/' | sed 's/},{/}\n{/g')
-    current_page=$(echo "$response" | grep -o '"current_page":[0-9]*' | cut -d: -f2)
-    last_page=$(echo "$response" | grep -o '"last_page":[0-9]*' | cut -d: -f2)
-    has_next=$(echo "$response" | grep -o '"has_next":true' | wc -l)
-    has_prev=$(echo "$response" | grep -o '"has_prev":true' | wc -l)
-
-    [ -z "$current_page" ] && current_page=1
+    local last_page=$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -nr | head -1 | cut -d= -f2 | tr -d '"')
     [ -z "$last_page" ] && last_page=1
-    [ "$has_next" -gt 0 ] && has_next="true" || has_next="false"
-    [ "$has_prev" -gt 0 ] && has_prev="true" || has_prev="false"
-
-    if [ -z "$results" ]; then
-        echo "No books found!"
-        return 1
-    fi
     
+    local has_prev="false"
+    [ "$page" -gt 1 ] && has_prev="true"
+    
+    local has_next="false"
+    [ "$page" -lt "$last_page" ] && has_next="true"
+
     echo "$query" > /tmp/last_search_query
-    echo "$current_page" > /tmp/last_search_page
+    echo "$page" > /tmp/last_search_page
     echo "$last_page" > /tmp/last_search_last_page
     echo "$has_next" > /tmp/last_search_has_next
     echo "$has_prev" > /tmp/last_search_has_prev
     
-    display_books "$results" "$current_page" "$has_prev" "$has_next" "$last_page"
-    echo "$results" > /tmp/search_results.json
-    return 0
+    local books=$(echo "$html_content" | awk '
+        BEGIN {
+            RS="<div class=\"h-\\[110px\\] flex flex-col justify-center \">";
+            FS=">";
+            print "["
+            book_count = 0
+        }
+        NR > 1 {
+            link = ""; md5 = ""; title = ""; author = ""; format = "null"
+            
+            if ($0 ~ /<a href="\/md5\//) {
+                link_start = index($0, "/md5/")
+                link_end = index(substr($0, link_start), "\"")
+                if (link_end > 0) {
+                    link = substr($0, link_start, link_end - 1)
+                    md5 = substr(link, 6, 32)
+                }
+            }
+            
+            if ($0 ~ /<h3 class=/) {
+                title_start = index($0, "<h3")
+                title_part = substr($0, title_start)
+                title_start = index(title_part, ">") + 1
+                title_end = index(title_part, "</h3>")
+                if (title_end > 0) {
+                    title = substr(title_part, title_start, title_end - title_start)
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", title)
+                    gsub(/"/, "\\\"", title)
+                    gsub(/•/, "\\u2022", title)
+                }
+            }
+            
+            if ($0 ~ /<div class=.*italic/) {
+                author_start = index($0, "italic")
+                author_part = substr($0, author_start)
+                author_start = index(author_part, ">") + 1
+                author_end = index(author_part, "</div>")
+                if (author_end > 0) {
+                    author = substr(author_part, author_start, author_end - author_start)
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", author)
+                    gsub(/"/, "\\\"", author)
+                }
+            }
+            
+            if ($0 ~ /text-gray-500">/) {
+                format_start = index($0, "text-gray-500\">") + 15
+                format_part = substr($0, format_start)
+                format_end = index(format_part, "<")
+                if (format_end > 0) {
+                    format_line = substr(format_part, 1, format_end - 1)
+                    if (match(format_line, /\.([a-z0-9]+),/)) {
+                        format = substr(format_line, RSTART + 1, RLENGTH - 2)
+                        format = "\"" format "\""
+                    }
+                }
+            }
+            
+            if (title != "") {
+                if (book_count > 0) printf ",\n"
+                printf "  {\"author\":\"%s\",\"format\":%s,\"md5\":\"%s\",\"title\":\"%s\",\"url\":\"https://annas-archive.org%s\"}", 
+                    author, format, md5, title, link
+                book_count++
+            }
+        }
+        END { print "\n]" }
+    ')
+    
+    echo "$books" > /tmp/search_results.json
+    display_books "$books" "$page" "$has_prev" "$has_next" "$last_page"
 }
 
 download_book() {
-    if [ -z "$SERVER_API" ]; then
-        echo "Error: Server API URL is not configured."
-        return 1
-    fi
-
     index=$1
     
     if [ ! -f "/tmp/search_results.json" ]; then
-        echo "Error: No search results found"
+        echo "Error: No search results found" >&2
         return 1
     fi
     
     book_info=$(awk -v i="$index" 'BEGIN{RS="\\{"; FS="\\}"} NR==i+1{print $1}' /tmp/search_results.json)
-    
-    if [ -z "$book_info" ]; then
-        echo "Invalid selection"
+    [ -z "$book_info" ] && {
+        echo "Invalid selection" >&2
         return 1
-    fi
+    }
     
     md5=$(get_json_value "$book_info" "md5")
     title=$(get_json_value "$book_info" "title")
+    author=$(get_json_value "$book_info" "author")
     format=$(get_json_value "$book_info" "format")
     
     echo "Downloading: $title"
     
-    download_data="{\"md5\":\"$md5\",\"title\":\"$title\""
-    if [ -n "$format" ]; then
-        download_data="$download_data,\"format\":\"$format\""
-    fi
-    download_data="$download_data}"
-    
-    response=$(curl -s -X POST "$SERVER_API/download" \
-        -H "Content-Type: application/json" \
-        -d "$download_data")
-    
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to connect to server"
+    clean_title=$(sanitize_filename "$title")
+    book_folder="$KINDLE_DOCUMENTS/$clean_title"
+    mkdir -p "$book_folder" || {
+        echo "Error: Failed to create folder '$book_folder'" >&2
         return 1
-    fi
-    
-    error=$(get_json_value "$response" "error")
-    if [ -n "$error" ]; then
-        echo "Download failed: $error"
+    }
+
+    libgen_content=$(curl -s -H "User-Agent: Mozilla/5.0" "https://libgen.li/ads.php?md5=$md5") || {
+        echo "Error: Failed to fetch Libgen page" >&2
         return 1
-    fi
+    }
     
-    filename=$(get_json_value "$response" "filename")
-    filename_without_type=${filename%.*}
+    download_link=$(echo "$libgen_content" | grep -o -m 1 'href="[^"]*get\.php[^"]*"' | cut -d'"' -f2)
+    [ -z "$download_link" ] && {
+        echo "Error: No download link found" >&2
+        return 1
+    }
 
-    echo "$title is almost done transferring to your Kindle!"
-
-    if [ ! -d "$KINDLE_DOCUMENTS" ]; then
-        echo "Creating Kindle documents directory: $KINDLE_DOCUMENTS"
-        mkdir -p "$KINDLE_DOCUMENTS"
-        if [ $? -ne 0 ]; then
-            echo "Error: Failed to create directory $KINDLE_DOCUMENTS"
-            return 1
-        fi
-    fi
-
-    mkdir "$KINDLE_DOCUMENTS/$filename_without_type"
-
-    if curl -s -o "$KINDLE_DOCUMENTS/$filename_without_type/$filename" "$SERVER_API/books/$filename"; then
-        echo "Success! Saved to: $KINDLE_DOCUMENTS/$filename"
+    temp_file="$book_folder/temp_$md5"
+    echo "Progress:"
     
-        delete_response=$(curl -s -X POST "$SERVER_API/delete" \
-            -H "Content-Type: application/json" \
-            -d "{\"filename\":\"$filename\"}")
-        
-        error=$(get_json_value "$delete_response" "error")
-        if [ -n "$error" ]; then
-            echo "Warning: Could not delete from server - $error"
+    for retry in {1..3}; do
+        if curl -f -L -C - \
+                -o "$temp_file" \
+                -H "User-Agent: Mozilla/5.0" \
+                -H "Referer: https://libgen.li/" \
+                --progress-bar \
+                "https://libgen.li/$download_link"; then
+            echo -e "\nDownload completed successfully!"
+            break
+        else
+            if [ $retry -eq 3 ]; then
+                echo -e "\nError: Download failed after 3 attempts" >&2
+                rm -f "$temp_file"
+                return 1
+            fi
+            echo "Retrying ($retry/3)..."
+            sleep 2
         fi
+    done
+
+    if head -c 4 "$temp_file" | grep -q "%PDF"; then
+        extension="pdf"
+    elif head -c 4 "$temp_file" | grep -q "EPUB"; then
+        extension="epub"
+    elif head -c 4 "$temp_file" | grep -q "MOBI"; then
+        extension="mobi"
+    elif head -c 4 "$temp_file" | grep -q "AZW"; then
+        extension="azw3"
     else
-        echo "Transfer failed"
-        return 1
+        extension="${format:-bin}"
     fi
+
+    final_file="$book_folder/$clean_title.$extension"
+    
+    if [ -f "$final_file" ]; then
+        counter=1
+        while [ -f "$book_folder/$clean_title-$counter.$extension" ]; do
+            counter=$((counter + 1))
+        done
+        final_file="$book_folder/$clean_title-$counter.$extension"
+    fi
+
+    mv "$temp_file" "$final_file" || {
+        echo "Error moving file" >&2
+        return 1
+    }
+
+    echo "Saved to: $final_file"
+    return 0
 }
 
 # Main menu
@@ -517,35 +566,42 @@ $(load_version) | https://github.com/justrals/KindleFetch
                         last_page=$(cat /tmp/last_search_last_page 2>/dev/null || echo 1)
                         has_next=$(cat /tmp/last_search_has_next 2>/dev/null || echo "false")
                         has_prev=$(cat /tmp/last_search_has_prev 2>/dev/null || echo "false")
-                        count=$(cat /tmp/search_results.json | grep -o '"title":' | wc -l)
+                        books=$(cat /tmp/search_results.json 2>/dev/null)
+                        count=$(echo "$books" | grep -o '"title":' | wc -l)
+                        
+                        display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
                         
                         echo -n "Enter choice: "
-                        read book_choice
+                        read choice
                         
-                        case "$book_choice" in
+                        case "$choice" in
                             [qQ])
                                 break
                                 ;;
-                            [nN])
-                                if [ "$has_next" = "true" ]; then
-                                    search_books "$query" "$((current_page + 1))"
+                            [pP])
+                                if [ "$has_prev" = "true" ]; then
+                                    new_page=$((current_page - 1))
+                                    search_books "$query" "$new_page"
                                 else
-                                    echo "Already on last page (page $current_page of $last_page)"
+                                    echo "Already on first page"
                                     sleep 2
                                 fi
                                 ;;
-                            [pP])
-                                if [ "$has_prev" = "true" ]; then
-                                    search_books "$query" "$((current_page - 1))"
+                            [nN])
+                                if [ "$has_next" = "true" ]; then
+                                    new_page=$((current_page + 1))
+                                    search_books "$query" "$new_page"
                                 else
-                                    echo "Already on first page (page 1 of $last_page)"
+                                    echo "Already on last page"
                                     sleep 2
                                 fi
                                 ;;
                             *)
-                                if echo "$book_choice" | grep -qE '^[0-9]+$'; then
-                                    if [ "$book_choice" -ge 1 ] && [ "$book_choice" -le "$count" ]; then
-                                        download_book "$book_choice"
+                                if echo "$choice" | grep -qE '^[0-9]+$'; then
+                                    if [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
+                                        download_book "$choice"
+                                        echo -n "Press any key to continue..."
+                                        read -n 1 -s
                                     else
                                         echo "Invalid selection (must be between 1 and $count)"
                                         sleep 2
