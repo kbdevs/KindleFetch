@@ -12,8 +12,14 @@ Simple CLI for downloading books from [Anna's Archive](https://annas-archive.org
 If it's not, follow [this guide](https://kindlemodding.org/) first.
 
 **Install kterm**:
-- Download the latest release from [kterm's releases page](https://github.com/bfabiszewski/kterm/releases)
-- Unzip the archive to the `extensions` directory in your Kindle's root
+1. Download the latest release from [kterm's releases page](https://github.com/bfabiszewski/kterm/releases)
+2. Unzip the archive to the `extensions` directory in your Kindle's root
+
+**KOReader (Optional but Recommended):**
+
+1. **Download** the latest release from the [KOReader Releases Page](https://github.com/koreader/koreader/releases)
+2. **Unsure which version to get?** Check the [Installation Guide](https://github.com/koreader/koreader/wiki/Installation-on-Kindle-devices#err-there-are-four-kindle-packages-to-choose-from-which-do-i-pick)
+3. **Extract** the contents of the downloaded archive to the **root directory** of your Kindle
 
 ## Installation
 
