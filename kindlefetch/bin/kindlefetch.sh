@@ -12,11 +12,39 @@ CONDENSED_OUTPUT=false
 UPDATE_AVAILABLE=false
 DEBUG_MODE=false
 
+# Check if required websites are accessible
+check_websites() {
+    echo "Checking connectivity to required websites..."
+    
+    if ! curl -s --head --connect-timeout 5 --max-time 10 https://libgen.li/ >/dev/null; then
+        echo "Error: Cannot connect to Libgen (https://libgen.li/)" >&2
+        echo "Please check your internet connection or try again later." >&2
+        echo "Press any key to exit."
+        read -n 1 -s
+        exit 1
+    fi
+    
+    if ! curl -s --head --connect-timeout 5 --max-time 10 https://annas-archive.org/ >/dev/null; then
+        echo "Error: Cannot connect to Anna's Archive (https://annas-archive.org/)" >&2
+        echo "Please check your internet connection or try again later." >&2
+
+        echo "Press any key to exit."
+        read -n 1 -s
+        exit 1
+    fi
+    
+    echo "Website connectivity check: OK"
+}
+
+# Run connectivity check
+check_websites
 
 
 # Check if running on a Kindle
 if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon" >/dev/null; }; then
     echo "Error: This script must run on a Kindle device." >&2
+    echo "Press any key to exit."
+    read -n 1 -s
     exit 1
 fi
 
@@ -159,9 +187,6 @@ settings_menu() {
                               __/ |    
                              |___/     
 "
-        echo "Tip:"
-        echo "Tap two fingers and press the X button to refresh the screen."
-        echo ""
         echo "Current configuration:"
         echo "1. Documents directory: $KINDLE_DOCUMENTS"
         echo "2. Create subfolders for books: $CREATE_SUBFOLDERS"
@@ -535,7 +560,7 @@ download_book() {
     
     echo "Downloading: $title"
     
-    clean_title=$(echo "$title" | tr -dc '[:alnum:]._-' | tr ' ' '_' | tr -s '_')
+    clean_title=$(sanitize_filename "$title" | tr -d ' ')
     
     if [ "$CREATE_SUBFOLDERS" = "true" ]; then
         book_folder="$KINDLE_DOCUMENTS/$clean_title"
@@ -549,12 +574,6 @@ download_book() {
         final_location="$book_folder/$clean_title"
     fi
 
-    available_space=$(df -k "$KINDLE_DOCUMENTS" | awk 'NR==2 {print $4}')
-    if [ "$available_space" -lt 51200 ]; then  # 50MB in KB
-        echo "Error: Not enough disk space (need at least 50MB free)" >&2
-        return 1
-    fi
-
     libgen_content=$(curl -s -H "User-Agent: Mozilla/5.0" "https://libgen.li/ads.php?md5=$md5") || {
         echo "Error: Failed to fetch Libgen page" >&2
         return 1
@@ -566,16 +585,11 @@ download_book() {
         return 1
     }
 
-    temp_file=$(mktemp "/tmp/temp_${md5}.XXXXXX")
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to create temp file" >&2
-        return 1
-    fi
-
+    temp_file="/tmp/temp_$md5"
     echo "Progress:"
     
     for retry in 1 2 3; do
-        if curl -f -L --connect-timeout 30 --max-time 300 \
+        if curl -f -L \
                 -o "$temp_file" \
                 -H "User-Agent: Mozilla/5.0" \
                 -H "Referer: https://libgen.li/" \
@@ -594,12 +608,6 @@ download_book() {
         fi
     done
 
-    if [ ! -s "$temp_file" ]; then
-        echo "Error: Downloaded file is empty" >&2
-        rm -f "$temp_file"
-        return 1
-    fi
-
     extension="${format:-bin}"
     final_file="$final_location.$extension"
     
@@ -611,16 +619,8 @@ download_book() {
         final_file="$final_location-$counter.$extension"
     fi
 
-    mkdir -p "$(dirname "$final_file")" || {
-        echo "Error: Failed to create destination directory" >&2
-        rm -f "$temp_file"
-        return 1
-    }
-
     mv "$temp_file" "$final_file" || {
-        echo "Error moving file to $final_file" >&2
-        echo "You might need to free up space or check permissions." >&2
-        rm -f "$temp_file"
+        echo "Error moving file" >&2
         return 1
     }
 
@@ -650,6 +650,8 @@ $(load_version) | https://github.com/justrals/KindleFetch
             echo "Update available! Select option 5 to install."
             echo ""
         fi
+        echo "Tap two fingers and press the X button to refresh the screen."
+        echo "--------------------------------"
         echo "1. Search and download books"
         echo "2. List my books"
         echo "3. Settings"
