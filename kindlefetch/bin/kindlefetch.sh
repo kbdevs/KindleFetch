@@ -216,7 +216,15 @@ display_books() {
     echo "--------------------------------"
     echo ""
     
+    # Debug output
+    echo "Debug - Raw JSON input:" >&2
+    echo "$1" | head -n 5 >&2
+    echo "..." >&2
+    echo "$1" | tail -n 5 >&2
+    
     count=$(echo "$1" | grep -o '"title":' | wc -l)
+    echo "Debug - Found $count books" >&2
+    
     i=0
     while [ $i -lt $count ]; do
         book_info=$(echo "$1" | awk -v i=$i 'BEGIN{RS="\\{"; FS="\\}"} NR==i+2{print $1}')
@@ -475,7 +483,7 @@ download_book() {
     
     echo "Downloading: $title"
     
-    clean_title=$(sanitize_filename "$title")
+    clean_title=$(sanitize_filename "$title" | tr -d ' ')
     
     if [ "$CREATE_SUBFOLDERS" = "true" ]; then
         book_folder="$KINDLE_DOCUMENTS/$clean_title"
@@ -503,8 +511,8 @@ download_book() {
     temp_file="/tmp/temp_$md5"
     echo "Progress:"
     
-    for retry in {1..3}; do
-        if curl -f -L -C - \
+    for retry in 1 2 3; do
+        if curl -f -L \
                 -o "$temp_file" \
                 -H "User-Agent: Mozilla/5.0" \
                 -H "Referer: https://libgen.li/" \
