@@ -187,6 +187,8 @@ settings_menu() {
                               __/ |    
                              |___/     
 "
+        echo "Tap two fingers and press the X button to refresh the screen."
+        echo "--------------------------------"
         echo "Current configuration:"
         echo "1. Documents directory: $KINDLE_DOCUMENTS"
         echo "2. Create subfolders for books: $CREATE_SUBFOLDERS"
@@ -650,8 +652,6 @@ $(load_version) | https://github.com/justrals/KindleFetch
             echo "Update available! Select option 5 to install."
             echo ""
         fi
-        echo "Tap two fingers and press the X button to refresh the screen."
-        echo "--------------------------------"
         echo "1. Search and download books"
         echo "2. List my books"
         echo "3. Settings"
