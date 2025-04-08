@@ -6,7 +6,7 @@ CONFIG_FILE="$SCRIPT_DIR/.kindlefetch_config"
 VERSION_FILE="$SCRIPT_DIR/.version"
 
 KINDLE_DOCUMENTS="/mnt/us/documents"
-CREATE_SUBFOLDERS=true
+CREATE_SUBFOLDERS=false
 
 UPDATE_AVAILABLE=false
 
