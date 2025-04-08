@@ -7,8 +7,12 @@ VERSION_FILE="$SCRIPT_DIR/.version"
 
 KINDLE_DOCUMENTS="/mnt/us/documents"
 CREATE_SUBFOLDERS=false
+CONDENSED_OUTPUT=false
 
 UPDATE_AVAILABLE=false
+DEBUG_MODE=false
+
+
 
 # Check if running on a Kindle
 if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon" >/dev/null; }; then
@@ -66,7 +70,7 @@ load_version() {
     else
         echo "Version file wasn't found!"
         sleep 2
-        echo "Сreating version file"
+        echo "Creating version file"
         sleep 2
         get_version
     fi
@@ -91,6 +95,8 @@ check_for_updates() {
 save_config() {
     echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" > "$CONFIG_FILE"
     echo "CREATE_SUBFOLDERS=\"$CREATE_SUBFOLDERS\"" >> "$CONFIG_FILE"
+    echo "DEBUG_MODE=\"$DEBUG_MODE\"" >> "$CONFIG_FILE"
+    echo "CONDENSED_OUTPUT=\"$CONDENSED_OUTPUT\"" >> "$CONFIG_FILE"
 }
 
 # First time configuration
@@ -114,14 +120,28 @@ first_time_setup() {
     if [ -n "$user_input" ]; then
         KINDLE_DOCUMENTS="$user_input"
     fi
-    echo -n "Create subfolders for books? (true/false) [default: false]: "
+    echo -n "Create subfolders for books? (true/false): "
     read subfolders_choice
     if [ "$subfolders_choice" = "true" ] || [ "$subfolders_choice" = "false" ]; then
         CREATE_SUBFOLDERS="$subfolders_choice"
     else
         CREATE_SUBFOLDERS="false"
     fi
-    
+    echo -n "Enable debug mode? (true/false): "
+    read debug_choice
+    if [ "$debug_choice" = "true" ] || [ "$debug_choice" = "false" ]; then
+        DEBUG_MODE="$debug_choice"
+    else
+        DEBUG_MODE="false"
+    fi
+    echo -n "Enable condensed output? (true/false): "
+    read condensed_choice
+    if [ "$condensed_choice" = "true" ] || [ "$condensed_choice" = "false" ]; then
+        CONDENSED_OUTPUT="$condensed_choice"
+    else
+        CONDENSED_OUTPUT="false"
+    fi
+
     save_config
 }
 
@@ -142,8 +162,10 @@ settings_menu() {
         echo "Current configuration:"
         echo "1. Documents directory: $KINDLE_DOCUMENTS"
         echo "2. Create subfolders for books: $CREATE_SUBFOLDERS"
-        echo "3. Check for updates"
-        echo "4. Back to main menu"
+        echo "3. Toggle debug mode: $DEBUG_MODE"
+        echo "4. Toggle condensed output: $CONDENSED_OUTPUT"
+        echo "5. Check for updates"
+        echo "6. Back to main menu"
         echo ""
         echo -n "Choose option: "
         read choice
@@ -169,6 +191,26 @@ settings_menu() {
                 fi
                 ;;
             3)  
+                if $DEBUG_MODE; then
+                    DEBUG_MODE=false
+                    echo "Debug mode disabled"
+                else
+                    DEBUG_MODE=true
+                    echo "Debug mode enabled"
+                fi
+                save_config
+                ;;
+            4)
+                if $CONDENSED_OUTPUT; then
+                    CONDENSED_OUTPUT=false
+                    echo "Condensed output disabled"
+                else
+                    CONDENSED_OUTPUT=true
+                    echo "Condensed output enabled"
+                fi
+                save_config
+                ;;
+            5)
                 check_for_updates
                 if [ "$UPDATE_AVAILABLE" = true ]; then
                     echo "Update is available! Would you like to update? [y/N]: "
@@ -191,9 +233,10 @@ settings_menu() {
                     sleep 2
                 fi
                 ;;
-            4)
+            6)
                 break
                 ;;
+
             *)
                 echo "Invalid option"
                 sleep 2
@@ -217,14 +260,15 @@ display_books() {
     echo ""
     
     # Debug output
-    echo "Debug - Raw JSON input:" >&2
-    echo "$1" | head -n 5 >&2
-    echo "..." >&2
-    echo "$1" | tail -n 5 >&2
-    
-    count=$(echo "$1" | grep -o '"title":' | wc -l)
-    echo "Debug - Found $count books" >&2
-    
+    if $DEBUG_MODE; then
+        echo "Debug - Raw JSON input:" >&2
+        echo "$1" | head -n 5 >&2
+        echo "..." >&2
+        echo "$1" | tail -n 5 >&2
+        
+        count=$(echo "$1" | grep -o '"title":' | wc -l)
+        echo "Debug - Found $count books" >&2
+    fi
     i=0
     while [ $i -lt $count ]; do
         book_info=$(echo "$1" | awk -v i=$i 'BEGIN{RS="\\{"; FS="\\}"} NR==i+2{print $1}')
@@ -232,9 +276,14 @@ display_books() {
         author=$(get_json_value "$book_info" "author")
         format=$(get_json_value "$book_info" "format")
         
-        printf "%2d. %s\n" $((i+1)) "$title"
-        [ -n "$author" ] && echo "    by $author"
-        [ -n "$format" ] && echo "    Format: $format"
+        if ! $CONDENSED_OUTPUT; then
+            printf "%2d. %s\n" $((i+1)) "$title"
+            [ -n "$author" ] && echo "    by $author"
+            [ -n "$format" ] && echo "    Format: $format"
+        else
+            printf "%2d. %s by %s in %s format\n" $((i+1)) "$title" "$author" "$format"
+        fi
+        
         
         i=$((i+1))
     done
@@ -567,11 +616,14 @@ main_menu() {
 |_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
                                                 
 $(load_version) | https://github.com/justrals/KindleFetch                                               
+
 "
         if $UPDATE_AVAILABLE; then
             echo "Update available! Select option 5 to install."
             echo ""
         fi
+        echo "Tap two fingers and press the X button to refresh the screen."
+        echo "--------------------------------"
         echo "1. Search and download books"
         echo "2. List my books"
         echo "3. Settings"
