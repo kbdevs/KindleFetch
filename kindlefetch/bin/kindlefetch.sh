@@ -430,7 +430,6 @@ search_books() {
     ')
     
     echo "$books" > /tmp/search_results.json
-    display_books "$books" "$page" "$has_prev" "$has_next" "$last_page"
 }
 
 download_book() {
@@ -598,19 +597,22 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                 fi
                                 ;;
                             *)
-                                if echo "$choice" | grep -qE '^[0-9]+$'; then
-                                    if [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
-                                        download_book "$choice"
-                                        echo -n "Press any key to continue..."
-                                        read -n 1 -s
-                                    else
-                                        echo "Invalid selection (must be between 1 and $count)"
+                                case "$choice" in
+                                    ''|*[!0-9]*)
+                                        echo "Invalid input"
                                         sleep 2
-                                    fi
-                                else
-                                    echo "Invalid input"
-                                    sleep 2
-                                fi
+                                        ;;
+                                    *)
+                                        if [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
+                                            download_book "$choice"
+                                            printf "Press Enter to continue..."
+                                            read
+                                        else
+                                            echo "Invalid selection (must be between 1 and $count)"
+                                            sleep 2
+                                        fi
+                                        ;;
+                                esac
                                 ;;
                         esac
                     done
