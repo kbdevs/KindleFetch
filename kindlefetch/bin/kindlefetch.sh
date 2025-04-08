@@ -56,6 +56,7 @@ get_version() {
     latest_sha=$(echo "$api_response" | grep -m1 '"sha":' | cut -d'"' -f4 | cut -c1-7)
     
     echo "$latest_sha" > "$VERSION_FILE"
+    load_version
 }
 
 load_version() {
