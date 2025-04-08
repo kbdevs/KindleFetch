@@ -6,6 +6,7 @@ CONFIG_FILE="$SCRIPT_DIR/.kindlefetch_config"
 VERSION_FILE="$SCRIPT_DIR/.version"
 
 KINDLE_DOCUMENTS="/mnt/us/documents"
+CREATE_SUBFOLDERS=true
 
 UPDATE_AVAILABLE=false
 
@@ -89,6 +90,7 @@ check_for_updates() {
 
 save_config() {
     echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" > "$CONFIG_FILE"
+    echo "CREATE_SUBFOLDERS=\"$CREATE_SUBFOLDERS\"" >> "$CONFIG_FILE"
 }
 
 # First time configuration
@@ -112,6 +114,13 @@ first_time_setup() {
     if [ -n "$user_input" ]; then
         KINDLE_DOCUMENTS="$user_input"
     fi
+    echo -n "Create subfolders for books? (true/false) [default: false]: "
+    read subfolders_choice
+    if [ "$subfolders_choice" = "true" ] || [ "$subfolders_choice" = "false" ]; then
+        CREATE_SUBFOLDERS="$subfolders_choice"
+    else
+        CREATE_SUBFOLDERS="false"
+    fi
     
     save_config
 }
@@ -132,8 +141,9 @@ settings_menu() {
 "
         echo "Current configuration:"
         echo "1. Documents directory: $KINDLE_DOCUMENTS"
-        echo "2. Check for updates"
-        echo "3. Back to main menu"
+        echo "2. Create subfolders for books: $CREATE_SUBFOLDERS"
+        echo "3. Check for updates"
+        echo "4. Back to main menu"
         echo ""
         echo -n "Choose option: "
         read choice
@@ -147,7 +157,18 @@ settings_menu() {
                     save_config
                 fi
                 ;;
-            2)  
+            2)
+                echo -n "Create subfolders for books? (true/false) [current: $CREATE_SUBFOLDERS]: "
+                read subfolders_choice
+                if [ "$subfolders_choice" = "true" ] || [ "$subfolders_choice" = "false" ]; then
+                    CREATE_SUBFOLDERS="$subfolders_choice"
+                    save_config
+                else
+                    echo "Invalid input, must be 'true' or 'false'"
+                    sleep 2
+                fi
+                ;;
+            3)  
                 check_for_updates
                 if [ "$UPDATE_AVAILABLE" = true ]; then
                     echo "Update is available! Would you like to update? [y/N]: "
@@ -170,7 +191,7 @@ settings_menu() {
                     sleep 2
                 fi
                 ;;
-            3)
+            4)
                 break
                 ;;
             *)
@@ -454,11 +475,18 @@ download_book() {
     echo "Downloading: $title"
     
     clean_title=$(sanitize_filename "$title")
-    book_folder="$KINDLE_DOCUMENTS/$clean_title"
-    mkdir -p "$book_folder" || {
-        echo "Error: Failed to create folder '$book_folder'" >&2
-        return 1
-    }
+    
+    if [ "$CREATE_SUBFOLDERS" = "true" ]; then
+        book_folder="$KINDLE_DOCUMENTS/$clean_title"
+        mkdir -p "$book_folder" || {
+            echo "Error: Failed to create folder '$book_folder'" >&2
+            return 1
+        }
+        final_location="$book_folder/$clean_title"
+    else
+        book_folder="$KINDLE_DOCUMENTS"
+        final_location="$book_folder/$clean_title"
+    fi
 
     libgen_content=$(curl -s -H "User-Agent: Mozilla/5.0" "https://libgen.li/ads.php?md5=$md5") || {
         echo "Error: Failed to fetch Libgen page" >&2
@@ -471,7 +499,7 @@ download_book() {
         return 1
     }
 
-    temp_file="$book_folder/temp_$md5"
+    temp_file="/tmp/temp_$md5"
     echo "Progress:"
     
     for retry in {1..3}; do
@@ -494,26 +522,15 @@ download_book() {
         fi
     done
 
-    if head -c 4 "$temp_file" | grep -q "%PDF"; then
-        extension="pdf"
-    elif head -c 4 "$temp_file" | grep -q "EPUB"; then
-        extension="epub"
-    elif head -c 4 "$temp_file" | grep -q "MOBI"; then
-        extension="mobi"
-    elif head -c 4 "$temp_file" | grep -q "AZW"; then
-        extension="azw3"
-    else
-        extension="${format:-bin}"
-    fi
-
-    final_file="$book_folder/$clean_title.$extension"
+    extension="${format:-bin}"
+    final_file="$final_location.$extension"
     
     if [ -f "$final_file" ]; then
         counter=1
-        while [ -f "$book_folder/$clean_title-$counter.$extension" ]; do
+        while [ -f "$final_location-$counter.$extension" ]; do
             counter=$((counter + 1))
         done
-        final_file="$book_folder/$clean_title-$counter.$extension"
+        final_file="$final_location-$counter.$extension"
     fi
 
     mv "$temp_file" "$final_file" || {
