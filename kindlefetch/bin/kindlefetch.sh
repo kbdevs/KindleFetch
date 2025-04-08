@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Variables
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+SCRIPT_DIR=$(dirname "$(readlink "$0")")  # BusyBox lacks -f, so no canonical path
 CONFIG_FILE="$SCRIPT_DIR/.kindlefetch_config"
 VERSION_FILE="$SCRIPT_DIR/.version"
 
@@ -10,7 +10,7 @@ KINDLE_DOCUMENTS="/mnt/us/documents"
 UPDATE_AVAILABLE=false
 
 # Check if running on a Kindle
-if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon" >/dev/null; }; then
+if ! [ -f "/etc/prettyversion.txt" ] && ! [ -d "/mnt/us" ] && ! pgrep lipc-daemon >/dev/null; then
     echo "Error: This script must run on a Kindle device." >&2
     exit 1
 fi
@@ -20,15 +20,13 @@ sanitize_filename() {
 }
 
 get_json_value() {
-    echo "$1" | grep -o "\"$2\":\"[^\"]*\"" | sed "s/\"$2\":\"\([^\"]*\)\"/\1/" || \
-    echo "$1" | grep -o "\"$2\":[^,}]*" | sed "s/\"$2\":\([^,}]*\)/\1/"
+    echo "$1" | grep "\"$2\":\"" | sed "s/.*\"$2\":\"\([^\"]*\)\".*/\1/" && return
+    echo "$1" | grep "\"$2\":" | sed "s/.*\"$2\":\([^,}]*\).*/\1/"
 }
 
 ensure_config_dir() {
     config_dir=$(dirname "$CONFIG_FILE")
-    if [ ! -d "$config_dir" ]; then
-        mkdir -p "$config_dir"
-    fi
+    [ -d "$config_dir" ] || mkdir -p "$config_dir"
 }
 
 cleanup() {
@@ -47,14 +45,14 @@ load_config() {
 }
 
 get_version() {
-    api_response=$(curl -s -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/justrals/KindleFetch/commits") || {
+    api_response=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/justrals/KindleFetch/commits") || {
         echo "Warning: Failed to fetch version from GitHub API" >&2
         echo "unknown"
         return
     }
 
-    latest_sha=$(echo "$api_response" | grep -m1 '"sha":' | cut -d'"' -f4 | cut -c1-7)
-    
+    latest_sha=$(echo "$api_response" | grep '"sha":' | head -n 1 | cut -d'"' -f4 | cut -c1-7)
     echo "$latest_sha" > "$VERSION_FILE"
     load_version
 }
@@ -65,20 +63,20 @@ load_version() {
     else
         echo "Version file wasn't found!"
         sleep 2
-        echo "Сreating version file"
+        echo "Creating version file"
         sleep 2
         get_version
     fi
 }
 
 check_for_updates() {
-    local current_sha=$(load_version)
-    
-    local latest_sha=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+    current_sha=$(load_version)
+
+    latest_sha=$(curl -s -H "Accept: application/vnd.github.v3+json" \
         -H "Cache-Control: no-cache" \
         "https://api.github.com/repos/justrals/KindleFetch/commits?per_page=1" | \
-        grep -oE '"sha": "[0-9a-f]+"' | head -1 | cut -d'"' -f4 | cut -c1-7)
-    
+        grep '"sha":' | head -n 1 | cut -d'"' -f4 | cut -c1-7)
+
     if [ -n "$latest_sha" ] && [ "$current_sha" != "$latest_sha" ]; then
         UPDATE_AVAILABLE=true
         return 0
@@ -91,10 +89,9 @@ save_config() {
     echo "KINDLE_DOCUMENTS=\"$KINDLE_DOCUMENTS\"" > "$CONFIG_FILE"
 }
 
-# First time configuration
 first_time_setup() {
     clear
-    echo -e "
+    echo "
   _____      _               
  / ____|    | |              
 | (___   ___| |_ _   _ _ __  
@@ -107,7 +104,7 @@ first_time_setup() {
     echo "Welcome to KindleFetch! Let's set up your configuration."
     echo ""
     
-    echo -n "Enter your Kindle documents directory [default: $KINDLE_DOCUMENTS]: "
+    echo "Enter your Kindle documents directory [default: $KINDLE_DOCUMENTS]: "
     read user_input
     if [ -n "$user_input" ]; then
         KINDLE_DOCUMENTS="$user_input"
@@ -116,11 +113,10 @@ first_time_setup() {
     save_config
 }
 
-# Settings menu
 settings_menu() {
     while true; do
         clear
-        echo -e "
+        echo "
   _____      _   _   _                 
  / ____|    | | | | (_)                
 | (___   ___| |_| |_ _ _ __   __ _ ___ 
@@ -135,12 +131,12 @@ settings_menu() {
         echo "2. Check for updates"
         echo "3. Back to main menu"
         echo ""
-        echo -n "Choose option: "
+        echo "Choose option: "
         read choice
         
         case "$choice" in
             1)
-                echo -n "Enter new documents directory: "
+                echo "Enter new documents directory: "
                 read new_dir
                 if [ -n "$new_dir" ]; then
                     KINDLE_DOCUMENTS="$new_dir"
@@ -152,7 +148,6 @@ settings_menu() {
                 if [ "$UPDATE_AVAILABLE" = true ]; then
                     echo "Update is available! Would you like to update? [y/N]: "
                     read confirm
-
                     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
                         echo "Installing update..."
                         if curl -s https://justrals.github.io/KindleFetch/install/install_kindle.sh | sh; then
@@ -170,10 +165,8 @@ settings_menu() {
                     sleep 2
                 fi
                 ;;
-            3)
-                break
-                ;;
-            *)
+            3) break ;;
+            *) 
                 echo "Invalid option"
                 sleep 2
                 ;;
@@ -181,10 +174,9 @@ settings_menu() {
     done
 }
 
-# Search menu
 display_books() {
     clear
-    echo -e "
+    echo "
   _____                     _     
  / ____|                   | |    
 | (___   ___  __ _ _ __ ___| |__  
@@ -195,10 +187,10 @@ display_books() {
     echo "--------------------------------"
     echo ""
     
-    count=$(echo "$1" | grep -o '"title":' | wc -l)
+    count=$(echo "$1" | grep '"title":' | wc -l)
     i=0
     while [ $i -lt $count ]; do
-        book_info=$(echo "$1" | awk -v i=$i 'BEGIN{RS="\\{"; FS="\\}"} NR==i+2{print $1}')
+        book_info=$(echo "$1" | awk -v i=$i 'BEGIN{RS="{"; FS="}"} NR==i+2{print $0}')
         title=$(get_json_value "$book_info" "title")
         author=$(get_json_value "$book_info" "author")
         format=$(get_json_value "$book_info" "format")
@@ -226,11 +218,10 @@ display_books() {
     echo ""
 }
 
-# Local books menu
 list_local_books() {
-    local current_dir="${1:-$KINDLE_DOCUMENTS}"
+    current_dir="${1:-$KINDLE_DOCUMENTS}"
     clear
-    echo -e "
+    echo "
  ____              _        
 |  _ \            | |       
 | |_) | ___   ___ | | _____ 
@@ -263,7 +254,6 @@ list_local_books() {
     for item in "$current_dir"/*; do
         if [ -f "$item" ]; then
             filename=$(basename "$item")
-            extension="${filename##*.}"
             echo "$i. $filename"
             echo "$item" >> /tmp/kindle_books.list
             i=$((i+1))
@@ -292,7 +282,7 @@ delete_book() {
         return 1
     fi
 
-    echo -n "Are you sure you want to delete '$book_file'? [y/N] "
+    printf "Are you sure you want to delete '$book_file'? [y/N] "
     read confirm
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
         if rm -f "$book_file"; then
@@ -314,7 +304,7 @@ delete_directory() {
         return 1
     fi
 
-    echo -n "Are you sure you want to delete '$dir_path' and all its contents? [y/N] "
+    printf "Are you sure you want to delete '$dir_path' and all its contents? [y/N] "
     read confirm
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
         if rm -rf "$dir_path"; then
@@ -328,11 +318,11 @@ delete_directory() {
 }
 
 search_books() {
-    local query="$1"
-    local page="${2:-1}"
+    query="$1"
+    page="${2:-1}"
     
     if [ -z "$query" ]; then
-        echo -n "Enter search query: "
+        printf "Enter search query: "
         read query
         [ -z "$query" ] && {
             echo "Search query cannot be empty"
@@ -345,15 +335,15 @@ search_books() {
     encoded_query=$(echo "$query" | sed 's/ /+/g')
     search_url="https://annas-archive.org/search?q=${encoded_query}&page=${page}"
     
-    local html_content=$(curl -s -H "User-Agent: Mozilla/5.0" "$search_url")
+    html_content=$(curl -s -H "User-Agent: Mozilla/5.0" "$search_url")
     
-    local last_page=$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -nr | head -1 | cut -d= -f2 | tr -d '"')
+    last_page=$(echo "$html_content" | sed -n 's/.*page=\([0-9]\+\)".*/\1/p' | sort -nr | head -n 1)
     [ -z "$last_page" ] && last_page=1
     
-    local has_prev="false"
+    has_prev="false"
     [ "$page" -gt 1 ] && has_prev="true"
     
-    local has_next="false"
+    has_next="false"
     [ "$page" -lt "$last_page" ] && has_next="true"
 
     echo "$query" > /tmp/last_search_query
@@ -362,7 +352,7 @@ search_books() {
     echo "$has_next" > /tmp/last_search_has_next
     echo "$has_prev" > /tmp/last_search_has_prev
     
-    local books=$(echo "$html_content" | awk '
+    books=$(echo "$html_content" | awk '
         BEGIN {
             RS="<div class=\"h-\\[110px\\] flex flex-col justify-center \">";
             FS=">";
@@ -388,7 +378,7 @@ search_books() {
                 title_end = index(title_part, "</h3>")
                 if (title_end > 0) {
                     title = substr(title_part, title_start, title_end - title_start)
-                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", title)
+                    gsub(/^[ \t]+|[ \t]+$/, "", title)
                     gsub(/"/, "\\\"", title)
                     gsub(/•/, "\\u2022", title)
                 }
@@ -401,7 +391,7 @@ search_books() {
                 author_end = index(author_part, "</div>")
                 if (author_end > 0) {
                     author = substr(author_part, author_start, author_end - author_start)
-                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", author)
+                    gsub(/^[ \t]+|[ \t]+$/, "", author)
                     gsub(/"/, "\\\"", author)
                 }
             }
@@ -446,14 +436,14 @@ download_book() {
         return 1
     }
     
-    md5=$(get_json_value "$book_info" "md5")
-    title=$(get_json_value "$book_info" "title")
-    author=$(get_json_value "$book_info" "author")
-    format=$(get_json_value "$book_info" "format")
+    md5=$(echo "$book_info" | sed -n 's/.*"md5":"\([^"]*\)".*/\1/p')
+    title=$(echo "$book_info" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')
+    author=$(echo "$book_info" | sed -n 's/.*"author":"\([^"]*\)".*/\1/p')
+    format=$(echo "$book_info" | sed -n 's/.*"format":"\([^"]*\)".*/\1/p')
     
     echo "Downloading: $title"
     
-    clean_title=$(sanitize_filename "$title")
+    clean_title=$(echo "$title" | tr -cd '[:alnum:] ._-')
     book_folder="$KINDLE_DOCUMENTS/$clean_title"
     mkdir -p "$book_folder" || {
         echo "Error: Failed to create folder '$book_folder'" >&2
@@ -465,7 +455,7 @@ download_book() {
         return 1
     }
     
-    download_link=$(echo "$libgen_content" | grep -o -m 1 'href="[^"]*get\.php[^"]*"' | cut -d'"' -f2)
+    download_link=$(echo "$libgen_content" | sed -n 's/.*href="\([^"]*get\.php[^"]*\)".*/\1/p' | head -n 1)
     [ -z "$download_link" ] && {
         echo "Error: No download link found" >&2
         return 1
@@ -474,18 +464,17 @@ download_book() {
     temp_file="$book_folder/temp_$md5"
     echo "Progress:"
     
-    for retry in {1..3}; do
+    for retry in 1 2 3; do
         if curl -f -L -C - \
                 -o "$temp_file" \
                 -H "User-Agent: Mozilla/5.0" \
                 -H "Referer: https://libgen.li/" \
-                --progress-bar \
                 "https://libgen.li/$download_link"; then
-            echo -e "\nDownload completed successfully!"
+            echo "Download completed successfully!"
             break
         else
             if [ $retry -eq 3 ]; then
-                echo -e "\nError: Download failed after 3 attempts" >&2
+                echo "Error: Download failed after 3 attempts" >&2
                 rm -f "$temp_file"
                 return 1
             fi
@@ -494,17 +483,14 @@ download_book() {
         fi
     done
 
-    if head -c 4 "$temp_file" | grep -q "%PDF"; then
-        extension="pdf"
-    elif head -c 4 "$temp_file" | grep -q "EPUB"; then
-        extension="epub"
-    elif head -c 4 "$temp_file" | grep -q "MOBI"; then
-        extension="mobi"
-    elif head -c 4 "$temp_file" | grep -q "AZW"; then
-        extension="azw3"
-    else
-        extension="${format:-bin}"
-    fi
+    file_type=$(dd if="$temp_file" bs=4 count=1 2>/dev/null | hexdump -v -e '1/1 "%02X"')
+    case "$file_type" in
+        25504446*) extension="pdf" ;;
+        45707562*) extension="epub" ;;
+        4D6F6269*) extension="mobi" ;;
+        415A5733*) extension="azw3" ;;
+        *) extension="${format:-bin}" ;;
+    esac
 
     final_file="$book_folder/$clean_title.$extension"
     
@@ -532,16 +518,16 @@ main_menu() {
     
     while true; do
         clear
-        echo -e "
+        printf "
  _  ___           _ _      ______   _       _     
 | |/ (_)         | | |    |  ____| | |     | |    
 | ' / _ _ __   __| | | ___| |__ ___| |_ ___| |__  
-|  < | | '_ \ / _\` | |/ _ \  __/ _ \ __/ __| '_ \\ 
-| . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
-|_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
+|  < | | '_ \\ / _\` | |/ _ \\  __/ _ \\ __/ __| '_ \\ 
+| . \\| | | | | (_| | |  __/ | |  __/ || (__| | | |
+|_|\\_\\_|_| |_|\\__,_|_|\\___|_|  \\___|\\__\\___|_| |_|
                                                 
 $(load_version) | https://github.com/justrals/KindleFetch                                               
-"
+\n"
         if $UPDATE_AVAILABLE; then
             echo "Update available! Select option 5 to install."
             echo ""
@@ -554,7 +540,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
             echo "5. Install update"
         fi
         echo ""
-        echo -n "Choose option: "
+        printf "Choose option: "
         read choice
         
         case "$choice" in
@@ -567,11 +553,11 @@ $(load_version) | https://github.com/justrals/KindleFetch
                         has_next=$(cat /tmp/last_search_has_next 2>/dev/null || echo "false")
                         has_prev=$(cat /tmp/last_search_has_prev 2>/dev/null || echo "false")
                         books=$(cat /tmp/search_results.json 2>/dev/null)
-                        count=$(echo "$books" | grep -o '"title":' | wc -l)
+                        count=$(echo "$books" | grep -c '"title":')
                         
                         display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
                         
-                        echo -n "Enter choice: "
+                        printf "Enter choice: "
                         read choice
                         
                         case "$choice" in
@@ -598,7 +584,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                 ;;
                             *)
                                 case "$choice" in
-                                    ''|*[!0-9]*)
+                                    *[!0-9]*)
                                         echo "Invalid input"
                                         sleep 2
                                         ;;
@@ -622,9 +608,11 @@ $(load_version) | https://github.com/justrals/KindleFetch
                 current_dir="$KINDLE_DOCUMENTS"
                 while true; do
                     if list_local_books "$current_dir"; then
-                        total_items=$(( $(wc -l < /tmp/kindle_folders.list 2>/dev/null) + $(wc -l < /tmp/kindle_books.list 2>/dev/null) ))
+                        folders_count=$(wc -l < /tmp/kindle_folders.list 2>/dev/null)
+                        books_count=$(wc -l < /tmp/kindle_books.list 2>/dev/null)
+                        total_items=$((folders_count + books_count))
                         
-                        echo -n "Enter choice: "
+                        printf "Enter choice: "
                         read choice
                         
                         case "$choice" in
@@ -635,10 +623,10 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                 current_dir=$(dirname "$current_dir")
                                 ;;
                             [dD])
-                                echo -n "Enter directory number to delete: "
+                                printf "Enter directory number to delete: "
                                 read dir_num
-                                if echo "$dir_num" | grep -qE '^[0-9]+$'; then
-                                    if [ "$dir_num" -le $(wc -l < /tmp/kindle_folders.list 2>/dev/null) ]; then
+                                if echo "$dir_num" | grep -q '^[0-9]\+$'; then
+                                    if [ "$dir_num" -le "$folders_count" ]; then
                                         delete_directory "$dir_num"
                                     else
                                         echo "Invalid directory number"
@@ -647,12 +635,12 @@ $(load_version) | https://github.com/justrals/KindleFetch
                                 fi
                                 ;;
                             *)
-                                if echo "$choice" | grep -qE '^[0-9]+$'; then
+                                if echo "$choice" | grep -q '^[0-9]\+$'; then
                                     if [ "$choice" -ge 1 ] && [ "$choice" -le "$total_items" ]; then
-                                        if [ "$choice" -le $(wc -l < /tmp/kindle_folders.list 2>/dev/null) ]; then
+                                        if [ "$choice" -le "$folders_count" ]; then
                                             current_dir=$(sed -n "${choice}p" /tmp/kindle_folders.list)
                                         else
-                                            file_index=$((choice - $(wc -l < /tmp/kindle_folders.list 2>/dev/null)))
+                                            file_index=$((choice - folders_count))
                                             delete_book "$file_index"
                                         fi
                                     else
