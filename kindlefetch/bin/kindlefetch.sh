@@ -433,47 +433,61 @@ search_books() {
 }
 
 download_book() {
-    index=$1
-    
+    local index=$1 # Index of the book selected from search results
+
+    # Check if search results file exists
     if [ ! -f "/tmp/search_results.json" ]; then
         echo "Error: No search results found" >&2
         return 1
     fi
-    
-    book_info=$(awk -v i="$index" 'BEGIN{RS="\\{"; FS="\\}"} NR==i+1{print $1}' /tmp/search_results.json)
-    [ -z "$book_info" ] && {
+
+    # Extract book information for the selected index using awk
+    local book_info=$(awk -v i="$index" 'BEGIN{RS="\\{"; FS="\\}"} NR==i+1{print $1}' /tmp/search_results.json)
+    if [ -z "$book_info" ]; then
         echo "Invalid selection" >&2
         return 1
-    }
-    
-    md5=$(get_json_value "$book_info" "md5")
-    title=$(get_json_value "$book_info" "title")
-    author=$(get_json_value "$book_info" "author")
-    format=$(get_json_value "$book_info" "format")
-    
-    echo "Downloading: $title"
-    
-    clean_title=$(sanitize_filename "$title")
-    book_folder="$KINDLE_DOCUMENTS/$clean_title"
-    mkdir -p "$book_folder" || {
-        echo "Error: Failed to create folder '$book_folder'" >&2
-        return 1
-    }
+    fi
 
-    libgen_content=$(curl -s -H "User-Agent: Mozilla/5.0" "https://libgen.li/ads.php?md5=$md5") || {
+    # Extract metadata using helper function
+    local md5=$(get_json_value "$book_info" "md5")
+    local title=$(get_json_value "$book_info" "title")
+    local author=$(get_json_value "$book_info" "author") # Author isn't used here but extracted
+    local format=$(get_json_value "$book_info" "format") # Original format guess
+
+    echo "Downloading: $title"
+
+    # Sanitize the title for use as a filename
+    local clean_title=$(sanitize_filename "$title")
+
+    # --- MODIFICATION START ---
+    # Removed: No longer creating a subfolder for the book
+    # book_folder="$KINDLE_DOCUMENTS/$clean_title"
+    # mkdir -p "$book_folder" || { ... }
+    # --- MODIFICATION END ---
+
+    # Fetch the intermediate Libgen page to find the actual download link
+    local libgen_content=$(curl -s -H "User-Agent: Mozilla/5.0" "https://libgen.li/ads.php?md5=$md5") || {
         echo "Error: Failed to fetch Libgen page" >&2
         return 1
     }
-    
-    download_link=$(echo "$libgen_content" | grep -o -m 1 'href="[^"]*get\.php[^"]*"' | cut -d'"' -f2)
-    [ -z "$download_link" ] && {
+
+    # Extract the final download link (usually contains get.php)
+    local download_link=$(echo "$libgen_content" | grep -o -m 1 'href="[^"]*get\.php[^"]*"' | cut -d'"' -f2)
+    if [ -z "$download_link" ]; then
         echo "Error: No download link found" >&2
+        # Consider removing the created folder if needed, but we removed folder creation
         return 1
     }
 
-    temp_file="$book_folder/temp_$md5"
+    # --- MODIFICATION START ---
+    # Define temporary file path directly in the main documents directory
+    local temp_file="$KINDLE_DOCUMENTS/temp_$md5"
+    # --- MODIFICATION END ---
+
     echo "Progress:"
-    
+
+    # Attempt download with up to 3 retries, resuming if possible
+    local success=false
     for retry in {1..3}; do
         if curl -f -L -C - \
                 -o "$temp_file" \
@@ -482,11 +496,13 @@ download_book() {
                 --progress-bar \
                 "https://libgen.li/$download_link"; then
             echo -e "\nDownload completed successfully!"
-            break
+            success=true
+            break # Exit retry loop on success
         else
+            echo -e "\nDownload attempt $retry failed."
             if [ $retry -eq 3 ]; then
-                echo -e "\nError: Download failed after 3 attempts" >&2
-                rm -f "$temp_file"
+                echo "Error: Download failed after 3 attempts" >&2
+                rm -f "$temp_file" # Clean up partial download
                 return 1
             fi
             echo "Retrying ($retry/3)..."
@@ -494,35 +510,44 @@ download_book() {
         fi
     done
 
+    # Determine file extension based on magic numbers or fallback
+    local extension
     if head -c 4 "$temp_file" | grep -q "%PDF"; then
         extension="pdf"
-    elif head -c 4 "$temp_file" | grep -q "EPUB"; then
-        extension="epub"
-    elif head -c 4 "$temp_file" | grep -q "MOBI"; then
+    elif head -c 4 "$temp_file" | grep -q "EPUB"; then # Standard EPUB magic number is tricky, often PK zip header
+        extension="epub" # Assuming EPUB based on common usage with Libgen
+    elif head -c 8 "$temp_file" | grep -q "BOOKMOBI"; then # Check 8 bytes for MOBI
         extension="mobi"
-    elif head -c 4 "$temp_file" | grep -q "AZW"; then
-        extension="azw3"
+    elif head -c 8 "$temp_file" | grep -q "STANDARDS"; then # Check 8 bytes for AZW/AZW3 (often starts with STANDARD*)
+         extension="azw3" # More likely AZW3
     else
-        extension="${format:-bin}"
+        extension="${format:-bin}" # Fallback to format from search or 'bin'
     fi
 
-    final_file="$book_folder/$clean_title.$extension"
-    
+    # --- MODIFICATION START ---
+    # Construct final file path directly in the main documents directory
+    local final_file="$KINDLE_DOCUMENTS/$clean_title.$extension"
+
+    # Check for existing file and append counter if needed
     if [ -f "$final_file" ]; then
-        counter=1
-        while [ -f "$book_folder/$clean_title-$counter.$extension" ]; do
+        local counter=1
+        # Loop until an unused filename is found
+        while [ -f "$KINDLE_DOCUMENTS/$clean_title-$counter.$extension" ]; do
             counter=$((counter + 1))
         done
-        final_file="$book_folder/$clean_title-$counter.$extension"
+        final_file="$KINDLE_DOCUMENTS/$clean_title-$counter.$extension"
     fi
+    # --- MODIFICATION END ---
 
-    mv "$temp_file" "$final_file" || {
-        echo "Error moving file" >&2
-        return 1
-    }
-
-    echo "Saved to: $final_file"
-    return 0
+    # Move the temporary file to the final calculated filename
+    if mv "$temp_file" "$final_file"; then
+        echo "Saved to: $final_file"
+        return 0 # Success
+    else
+        echo "Error moving temporary file '$temp_file' to '$final_file'" >&2
+        rm -f "$temp_file" # Attempt cleanup
+        return 1 # Failure
+    fi
 }
 
 # Main menu
