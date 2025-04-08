@@ -451,6 +451,7 @@ search_books() {
     ')
     
     echo "$books" > /tmp/search_results.json
+    display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
 }
 
 download_book() {
@@ -585,8 +586,6 @@ $(load_version) | https://github.com/justrals/KindleFetch
                         has_prev=$(cat /tmp/last_search_has_prev 2>/dev/null || echo "false")
                         books=$(cat /tmp/search_results.json 2>/dev/null)
                         count=$(echo "$books" | grep -o '"title":' | wc -l)
-                        
-                        display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
                         
                         echo -n "Enter choice: "
                         read choice
