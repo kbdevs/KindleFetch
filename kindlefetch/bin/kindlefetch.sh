@@ -587,6 +587,8 @@ $(load_version) | https://github.com/justrals/KindleFetch
                         books=$(cat /tmp/search_results.json 2>/dev/null)
                         count=$(echo "$books" | grep -o '"title":' | wc -l)
                         
+                        display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
+                        
                         echo -n "Enter choice: "
                         read choice
                         
