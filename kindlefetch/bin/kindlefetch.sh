@@ -451,7 +451,7 @@ search_books() {
     ')
     
     echo "$books" > /tmp/search_results.json
-    display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
+    display_books "$books" "$page" "$has_prev" "$has_next" "$last_page"
 }
 
 download_book() {
