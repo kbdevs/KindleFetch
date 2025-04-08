@@ -187,8 +187,9 @@ settings_menu() {
                               __/ |    
                              |___/     
 "
+        echo "Tip:"
         echo "Tap two fingers and press the X button to refresh the screen."
-        echo "--------------------------------"
+        echo ""
         echo "Current configuration:"
         echo "1. Documents directory: $KINDLE_DOCUMENTS"
         echo "2. Create subfolders for books: $CREATE_SUBFOLDERS"
@@ -252,7 +253,7 @@ settings_menu() {
                             echo "Update installed successfully!"
                             UPDATE_AVAILABLE=false
                             VERSION=$(load_version)
-                            sleep 2
+                            exit 0
                         else
                             echo "Failed to install update"
                             sleep 2
@@ -587,7 +588,7 @@ download_book() {
         return 1
     }
 
-    temp_file="/tmp/temp_$md5"
+    temp_file="$SCRIPT_DIR/temp_$md5"
     echo "Progress:"
     
     for retry in 1 2 3; do
@@ -788,7 +789,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
                         echo "Update installed successfully!"
                         UPDATE_AVAILABLE=false
                         VERSION=$(load_version)
-                        sleep 2
+                        exit 0
                     else
                         echo "Failed to install update"
                         sleep 2
