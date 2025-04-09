@@ -608,6 +608,9 @@ download_book() {
     }
 
     temp_file="$SCRIPT_DIR/temp_$md5"
+
+    download_url=$(echo "$download_link" | grep -q '^http' && echo "$download_link" || echo "http://libgen.li/$download_link")
+
     echo "Progress:"
     
     for retry in 1 2 3; do
@@ -616,7 +619,7 @@ download_book() {
                 -H "User-Agent: Mozilla/5.0" \
                 -H "Referer: https://libgen.li/" \
                 --progress-bar \
-                "https://libgen.li/$download_link"; then
+                "$download_url"; then
             echo -e "\nDownload completed successfully!"
             break
         else
