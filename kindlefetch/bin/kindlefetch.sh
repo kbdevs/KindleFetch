@@ -45,16 +45,39 @@ first_time_setup() {
     echo "Welcome to KindleFetch! Let's set up your configuration."
     echo ""
     
-    echo -n "Select one of Anna's Archive mirrors (org / li / se) [default: org]: "
-    read mirror_choice
-
-    mirror_choice=$(echo "$mirror_choice" | tr '[:upper:]' '[:lower:]')
-
-    if [ "$mirror_choice" = "li" ] || [ "$mirror_choice" = "se" ]; then
-        ANNAS_ARCHIVE_MIRROR="$mirror_choice"
-    else
-        ANNAS_ARCHIVE_MIRROR="org"
+    echo "Testing Anna's Archive mirrors for accessibility..."
+    
+    # Function to test if a mirror is accessible
+    test_mirror() {
+        local mirror="$1"
+        if curl -s --head --connect-timeout 5 --max-time 10 "https://annas-archive.$mirror/" >/dev/null; then
+            return 0 # Success
+        else
+            return 1 # Failure
+        fi
+    }
+    
+    # Try each mirror
+    MIRROR_FOUND=false
+    for mirror in "org" "li" "se"; do
+        echo "Testing $mirror mirror..."
+        if test_mirror "$mirror"; then
+            ANNAS_ARCHIVE_MIRROR="$mirror"
+            MIRROR_FOUND=true
+            echo "Using annas-archive.$mirror as primary mirror"
+            break
+        fi
+    done
+    
+    # If no mirror is accessible, exit
+    if [ "$MIRROR_FOUND" = false ]; then
+        echo "Error: Cannot access any Anna's Archive mirrors." >&2
+        echo "Please check your internet connection or try again later." >&2
+        echo "Press any key to exit."
+        read -n 1 -s
+        exit 1
     fi
+    
     echo -n "Enter your Kindle documents directory [default: $KINDLE_DOCUMENTS]: "
     read user_input
     if [ -n "$user_input" ]; then
