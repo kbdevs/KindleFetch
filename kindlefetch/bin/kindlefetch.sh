@@ -6,11 +6,77 @@ CONFIG_FILE="$SCRIPT_DIR/.kindlefetch_config"
 VERSION_FILE="$SCRIPT_DIR/.version"
 
 KINDLE_DOCUMENTS="/mnt/us/documents"
+ANNAS_ARCHIVE_MIRROR="org"
 CREATE_SUBFOLDERS=false
 CONDENSED_OUTPUT=false
+DEBUG_MODE=false
 
 UPDATE_AVAILABLE=false
-DEBUG_MODE=false
+
+# Check if running on a Kindle
+if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon" >/dev/null; }; then
+    echo "Error: This script must run on a Kindle device." >&2
+    echo "Press any key to exit."
+    read -n 1 -s
+    exit 1
+fi
+
+load_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        . "$CONFIG_FILE"
+    else
+        first_time_setup
+    fi
+}
+
+# First time configuration
+first_time_setup() {
+    clear
+    echo -e "
+  _____      _               
+ / ____|    | |              
+| (___   ___| |_ _   _ _ __  
+ \___ \ / _ \ __| | | | '_ \ 
+ ____) |  __/ |_| |_| | |_) |
+|_____/ \___|\__|\__,_| .__/ 
+                      | |    
+                      |_|    
+"
+    echo "Welcome to KindleFetch! Let's set up your configuration."
+    echo ""
+    
+    echo -n "Select one of Anna's Archive mirrors (org / li / se) [default: org]: "
+    read mirror_choice
+
+    mirror_choice=$(echo "$mirror_choice" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$mirror_choice" = "li" ] || [ "$mirror_choice" = "se" ]; then
+        ANNAS_ARCHIVE_MIRROR="$mirror_choice"
+    else
+        ANNAS_ARCHIVE_MIRROR="org"
+    fi
+    echo -n "Enter your Kindle documents directory [default: $KINDLE_DOCUMENTS]: "
+    read user_input
+    if [ -n "$user_input" ]; then
+        KINDLE_DOCUMENTS="$user_input"
+    fi
+    echo -n "Create subfolders for books? (true/false): "
+    read subfolders_choice
+    if [ "$subfolders_choice" = "true" ] || [ "$subfolders_choice" = "false" ]; then
+        CREATE_SUBFOLDERS="$subfolders_choice"
+    else
+        CREATE_SUBFOLDERS="false"
+    fi
+    echo -n "Enable condensed output? (true/false): "
+    read condensed_choice
+    if [ "$condensed_choice" = "true" ] || [ "$condensed_choice" = "false" ]; then
+        CONDENSED_OUTPUT="$condensed_choice"
+    else
+        CONDENSED_OUTPUT="false"
+    fi
+
+    save_config
+}
 
 # Check if required websites are accessible
 check_websites() {
@@ -24,8 +90,8 @@ check_websites() {
         exit 1
     fi
     
-    if ! curl -s --head --connect-timeout 5 --max-time 10 https://annas-archive.org/ >/dev/null; then
-        echo "Error: Cannot connect to Anna's Archive (https://annas-archive.org/)" >&2
+    if ! curl -s --head --connect-timeout 5 --max-time 10 https://annas-archive.$ANNAS_ARCHIVE_MIRROR/ >/dev/null; then
+        echo "Error: Cannot connect to Anna's Archive (https://annas-archive.$ANNAS_ARCHIVE_MIRROR/)" >&2
         echo "Please check your internet connection or try again later." >&2
 
         echo "Press any key to exit."
@@ -38,15 +104,6 @@ check_websites() {
 
 # Run connectivity check
 check_websites
-
-
-# Check if running on a Kindle
-if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon" >/dev/null; }; then
-    echo "Error: This script must run on a Kindle device." >&2
-    echo "Press any key to exit."
-    read -n 1 -s
-    exit 1
-fi
 
 sanitize_filename() {
     echo "$1" | sed -e 's/[^[:alnum:]\._-]/_/g' -e 's/ /_/g'
@@ -71,11 +128,15 @@ cleanup() {
           /tmp/last_search_*
 }
 
-load_config() {
-    if [ -f "$CONFIG_FILE" ]; then
-        . "$CONFIG_FILE"
+load_version() {
+    if [ -f "$VERSION_FILE" ]; then
+        cat "$VERSION_FILE"
     else
-        first_time_setup
+        echo "Version file wasn't found!"
+        sleep 2
+        echo "Creating version file"
+        sleep 2
+        get_version
     fi
 }
 
@@ -90,18 +151,6 @@ get_version() {
     
     echo "$latest_sha" > "$VERSION_FILE"
     load_version
-}
-
-load_version() {
-    if [ -f "$VERSION_FILE" ]; then
-        cat "$VERSION_FILE"
-    else
-        echo "Version file wasn't found!"
-        sleep 2
-        echo "Creating version file"
-        sleep 2
-        get_version
-    fi
 }
 
 check_for_updates() {
@@ -125,52 +174,7 @@ save_config() {
     echo "CREATE_SUBFOLDERS=\"$CREATE_SUBFOLDERS\"" >> "$CONFIG_FILE"
     echo "DEBUG_MODE=\"$DEBUG_MODE\"" >> "$CONFIG_FILE"
     echo "CONDENSED_OUTPUT=\"$CONDENSED_OUTPUT\"" >> "$CONFIG_FILE"
-}
-
-# First time configuration
-first_time_setup() {
-    clear
-    echo -e "
-  _____      _               
- / ____|    | |              
-| (___   ___| |_ _   _ _ __  
- \___ \ / _ \ __| | | | '_ \ 
- ____) |  __/ |_| |_| | |_) |
-|_____/ \___|\__|\__,_| .__/ 
-                      | |    
-                      |_|    
-"
-    echo "Welcome to KindleFetch! Let's set up your configuration."
-    echo ""
-    
-    echo -n "Enter your Kindle documents directory [default: $KINDLE_DOCUMENTS]: "
-    read user_input
-    if [ -n "$user_input" ]; then
-        KINDLE_DOCUMENTS="$user_input"
-    fi
-    echo -n "Create subfolders for books? (true/false): "
-    read subfolders_choice
-    if [ "$subfolders_choice" = "true" ] || [ "$subfolders_choice" = "false" ]; then
-        CREATE_SUBFOLDERS="$subfolders_choice"
-    else
-        CREATE_SUBFOLDERS="false"
-    fi
-    echo -n "Enable debug mode? (true/false): "
-    read debug_choice
-    if [ "$debug_choice" = "true" ] || [ "$debug_choice" = "false" ]; then
-        DEBUG_MODE="$debug_choice"
-    else
-        DEBUG_MODE="false"
-    fi
-    echo -n "Enable condensed output? (true/false): "
-    read condensed_choice
-    if [ "$condensed_choice" = "true" ] || [ "$condensed_choice" = "false" ]; then
-        CONDENSED_OUTPUT="$condensed_choice"
-    else
-        CONDENSED_OUTPUT="false"
-    fi
-
-    save_config
+    echo "ANNAS_ARCHIVE_MIRROR=\"$ANNAS_ARCHIVE_MIRROR\"" >> "$CONFIG_FILE"
 }
 
 # Settings menu
@@ -192,11 +196,12 @@ settings_menu() {
         echo ""
         echo "Current configuration:"
         echo "1. Documents directory: $KINDLE_DOCUMENTS"
-        echo "2. Create subfolders for books: $CREATE_SUBFOLDERS"
+        echo "2. Toggle subfolders for books: $CREATE_SUBFOLDERS"
         echo "3. Toggle debug mode: $DEBUG_MODE"
         echo "4. Toggle condensed output: $CONDENSED_OUTPUT"
-        echo "5. Check for updates"
-        echo "6. Back to main menu"
+        echo "5. Anna's Archive mirror: $ANNAS_ARCHIVE_MIRROR"
+        echo "6. Check for updates"
+        echo "7. Back to main menu"
         echo ""
         echo -n "Choose option: "
         read choice
@@ -211,15 +216,14 @@ settings_menu() {
                 fi
                 ;;
             2)
-                echo -n "Create subfolders for books? (true/false) [current: $CREATE_SUBFOLDERS]: "
-                read subfolders_choice
-                if [ "$subfolders_choice" = "true" ] || [ "$subfolders_choice" = "false" ]; then
-                    CREATE_SUBFOLDERS="$subfolders_choice"
-                    save_config
+                if $CREATE_SUBFOLDERS; then
+                    CREATE_SUBFOLDERS=false
+                    echo "Subfolders disabled"
                 else
-                    echo "Invalid input, must be 'true' or 'false'"
-                    sleep 2
+                    CREATE_SUBFOLDERS=true
+                    echo "Subfolders enabled"
                 fi
+                save_config
                 ;;
             3)  
                 if $DEBUG_MODE; then
@@ -242,6 +246,20 @@ settings_menu() {
                 save_config
                 ;;
             5)
+                echo -n "Enter new Anna's Archive mirror (org / li / se): "
+                read mirror_choice
+
+                mirror_choice=$(echo "$mirror_choice" | tr '[:upper:]' '[:lower:]')
+
+                if [ "$mirror_choice" = "li" ] || [ "$mirror_choice" = "se" ] || [ "$mirror_choice" = "org" ]; then
+                    ANNAS_ARCHIVE_MIRROR="$mirror_choice"
+                else
+                    echo "Invalid choice"
+                    sleep 2
+                fi
+                save_config
+                ;;
+            6)
                 check_for_updates
                 if [ "$UPDATE_AVAILABLE" = true ]; then
                     echo "Update is available! Would you like to update? [y/N]: "
@@ -253,7 +271,7 @@ settings_menu() {
                             echo "Update installed successfully!"
                             UPDATE_AVAILABLE=false
                             VERSION=$(load_version)
-                            exit 0
+                            exec exit 0
                         else
                             echo "Failed to install update"
                             sleep 2
@@ -264,7 +282,7 @@ settings_menu() {
                     sleep 2
                 fi
                 ;;
-            6)
+            7)
                 break
                 ;;
 
@@ -311,15 +329,16 @@ display_books() {
             printf "%2d. %s\n" $((i+1)) "$title"
             [ -n "$author" ] && echo "    by $author"
             [ -n "$format" ] && echo "    Format: $format"
+            echo ""
         else
             printf "%2d. %s by %s in %s format\n" $((i+1)) "$title" "$author" "$format"
+            echo ""
         fi
         
         
         i=$((i+1))
     done
     
-    echo ""
     echo "--------------------------------"
     echo ""
     echo "Page $2 of $5"
@@ -452,7 +471,7 @@ search_books() {
     echo "Searching for '$query' (page $page)..."
     
     encoded_query=$(echo "$query" | sed 's/ /+/g')
-    search_url="https://annas-archive.org/search?q=${encoded_query}&page=${page}"
+    search_url="https://annas-archive.$ANNAS_ARCHIVE_MIRROR/search?q=${encoded_query}&page=${page}"
     
     local html_content=$(curl -s -H "User-Agent: Mozilla/5.0" "$search_url")
     
@@ -530,7 +549,7 @@ search_books() {
             
             if (title != "") {
                 if (book_count > 0) printf ",\n"
-                printf "  {\"author\":\"%s\",\"format\":%s,\"md5\":\"%s\",\"title\":\"%s\",\"url\":\"https://annas-archive.org%s\"}", 
+                printf "  {\"author\":\"%s\",\"format\":%s,\"md5\":\"%s\",\"title\":\"%s\",\"url\":\"https://annas-archive.$ANNAS_ARCHIVE_MIRROR%s\"}", 
                     author, format, md5, title, link
                 book_count++
             }
@@ -788,7 +807,7 @@ $(load_version) | https://github.com/justrals/KindleFetch
                         echo "Update installed successfully!"
                         UPDATE_AVAILABLE=false
                         VERSION=$(load_version)
-                        exit 0
+                        exec exit 0
                     else
                         echo "Failed to install update"
                         sleep 2
