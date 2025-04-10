@@ -89,18 +89,39 @@ check_websites() {
     if ! curl --insecure -s --head --connect-timeout 5 --max-time 10 $BOOK_FIRST_SOURCE/ >/dev/null; then
         echo "Error: Cannot connect to your first book source ($BOOK_FIRST_SOURCE/)" >&2
         echo "Please check your internet connection or try again later." >&2
+        echo "Do you want to change the url? [y/N]: "
+        read confirm
 
-        echo "Press any key to exit."
-        read -n 1 -s
-        exit 1
+        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+            echo -n "Enter new first book source [example: https://link-adress.com]: "
+            read user_input
+            if [ -n "$user_input" ]; then
+                BOOK_FIRST_SOURCE="$user_input"
+            fi
+            save_config
+            check_websites
+        else
+            exit 1
+        fi
     fi
     
     if ! curl --insecure -s --head --connect-timeout 5 --max-time 10 $BOOK_SECOND_SOURCE/ >/dev/null; then
         echo "Error: Cannot connect to your second book source ($BOOK_SECOND_SOURCE/)" >&2
         echo "Please check your internet connection or try again later." >&2
-        echo "Press any key to exit."
-        read -n 1 -s
-        exit 1
+        echo "Do you want to change the url? [y/N]: "
+        read confirm
+
+        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+            echo -n "Enter new second book source [example: https://link-adress.com]: "
+            read user_input
+            if [ -n "$user_input" ]; then
+                BOOK_SECOND_SOURCE="$user_input"
+            fi
+            save_config
+            check_websites
+        else
+            exit 1
+        fi
     fi
     
     echo "Website connectivity check: OK"
