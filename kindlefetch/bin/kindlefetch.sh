@@ -643,7 +643,7 @@ download_book() {
                 return 1
             fi
             
-            if mv -f "$temp_file" "$final_location"; then
+            if cp "$temp_file" "$final_location" && rm -f "$temp_file"; then
                 echo "File saved to: $final_location"
                 chmod 644 "$final_location"
                 return 0
