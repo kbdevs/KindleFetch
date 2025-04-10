@@ -629,7 +629,7 @@ download_book() {
     echo "Progress:"
     
     for retry in 1 2 3; do
-        if curl --insecure -f -L \
+        if curl --insecure --tlsv1.2 -f -L \
                 -o "$temp_file" \
                 -H "User-Agent: Mozilla/5.0" \
                 -H "Referer: $BOOK_SECOND_SOURCE/" \
