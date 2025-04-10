@@ -1,0 +1,9 @@
+.DS_Store
+books/
+.env
+kindlefetch_config
+.vscode
+.idea
+venv/
+kindlefetch.zip
+.version
