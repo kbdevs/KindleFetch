@@ -497,8 +497,7 @@ search_books() {
     echo "Searching for '$query' (page $page)..."
     
     encoded_query=$(echo "$query" | sed 's/ /+/g')
-    search_url="$BOOK_FIRST_SOURCE/search?q=${encoded_query}&page=${page}"
-    
+    search_url="$BOOK_FIRST_SOURCE/search?index=&page=${page}&q=${encoded_query}&display=&src=lgli&sort="
     local html_content=$(curl --insecure -s -H "User-Agent: Mozilla/5.0" "$search_url")
     
     local last_page=$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -nr | head -1 | cut -d= -f2 | tr -d '"')
