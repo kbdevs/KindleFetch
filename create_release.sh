@@ -19,4 +19,6 @@ VERSION=$(get_version)
 mkdir -p "$INSTALL_DIR/bin"
 echo "$VERSION" > "kindlefetch/bin/.version"
 
+find kindlefetch -name ".DS_Store" -delete
+
 zip kindlefetch.zip -r kindlefetch

@@ -32,46 +32,28 @@ get_version() {
     fi
 }
 
-# Backup existing config
-if [ -f "$CONFIG_FILE" ]; then
-    echo "Backing up existing config..."
-    cp -f "$CONFIG_FILE" "$TEMP_CONFIG"
-fi
-
-# Download repository
 echo "Downloading KindleFetch..."
 curl -s -L -o "$ZIP_FILE" "$REPO_URL"
 echo "Download complete."
 
-# Extract files
 echo "Extracting files..."
 unzip -o "$ZIP_FILE" -d "/mnt/us"
 echo "Extraction complete."
 rm -f "$ZIP_FILE"
 
-# Remove old installation
 echo "Removing old installation..."
 rm -rf "$INSTALL_DIR"
 
-# Install
 echo "Installing KindleFetch..."
 mkdir -p "$INSTALL_DIR"
 mv -f "$EXTRACTED_DIR/kindlefetch"/* "$INSTALL_DIR/"
 echo "Installation successful."
 
-# Create version file
 echo "Creating version file..."
 VERSION=$(get_version)
 mkdir -p "$INSTALL_DIR/bin"
 echo "$VERSION" > "$VERSION_FILE"
 
-# Restore config
-if [ -f "$TEMP_CONFIG" ]; then
-    echo "Restoring configuration..."
-    mv -f "$TEMP_CONFIG" "$CONFIG_FILE"
-fi
-
-# Cleanup
 echo "Cleaning up..."
 rm -rf "$EXTRACTED_DIR"
 
