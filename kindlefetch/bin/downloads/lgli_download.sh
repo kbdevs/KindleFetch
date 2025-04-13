@@ -46,8 +46,10 @@ lgli_download() {
 
     echo "Fetching download page..."
     if ! lgli_content=$(curl -s -L "$LGLI_URL/ads.php?md5=$md5"); then
-        echo "Error: Failed to fetch book page" >&2
-        return 1
+        if ! lgli_content=$(curl -s -L -x "$PROXY_URL" "$LGLI_URL/ads.php?md5=$md5"); then
+            echo "Error: Failed to fetch book page" >&2
+            return 1
+        fi
     fi
     
     if ! download_link=$(echo "$lgli_content" | grep -o -m 1 'href="[^"]*get\.php[^"]*"' | cut -d'"' -f2); then

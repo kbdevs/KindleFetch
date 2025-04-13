@@ -46,8 +46,10 @@ zlib_download() {
 
     echo "Fetching download page..."
     if ! zlib_content=$(curl -s -L "$ZLIB_URL/md5/$md5"); then
-        echo "Error: Failed to fetch book page" >&2
-        return 1
+        if ! zlib_content=$(curl -s -L -x "$PROXY_URL" "$ZLIB_URL/md5/$md5"); then
+            echo "Error: Failed to fetch book page" >&2
+            return 1
+        fi
     fi
     
     if ! download_link=$(echo "$zlib_content" | grep -o 'href="/dl/[^"]*"' | head -1 | sed 's/href="//;s/"//'); then
