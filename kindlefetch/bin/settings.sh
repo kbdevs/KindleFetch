@@ -28,10 +28,16 @@ settings_menu() {
         
         case "$choice" in
             1)
-                echo -n "Enter new documents directory: "
+                echo -n "Enter your new Kindle downloads directory [It will be /mnt/us/your_directory. Only enter your_directory part.]: "
                 read new_dir
                 if [ -n "$new_dir" ]; then
-                    KINDLE_DOCUMENTS="$new_dir"
+                    KINDLE_DOCUMENTS="/mnt/us/$new_dir"
+                    if [ ! -d "$KINDLE_DOCUMENTS" ]; then
+                        mkdir -p "$KINDLE_DOCUMENTS" || {
+                            echo "Error: Failed to create directory $KINDLE_DOCUMENTS" >&2
+                            exit 1
+                        }
+                    fi
                     save_config
                 fi
                 ;;

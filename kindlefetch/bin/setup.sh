@@ -17,10 +17,16 @@ first_time_setup() {
     echo "NOTE: This tool does not provide copyrighted material. You must configure your own book sources."
     echo ""
     
-    echo -n "Enter your Kindle downloads directory [default: /mnt/us/documents]: "
+    echo -n "Enter your Kindle downloads directory [It will be /mnt/us/your_directory. Only enter your_directory part.]: "
     read user_input
     if [ -n "$user_input" ]; then
-        KINDLE_DOCUMENTS="$user_input"
+        KINDLE_DOCUMENTS="/mnt/us/$user_input"
+        if [ ! -d "$KINDLE_DOCUMENTS" ]; then
+            mkdir -p "$KINDLE_DOCUMENTS" || {
+                echo "Error: Failed to create directory $KINDLE_DOCUMENTS" >&2
+                exit 1
+            }
+        fi
     else
         KINDLE_DOCUMENTS="/mnt/us/documents"
     fi
