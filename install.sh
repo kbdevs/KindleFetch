@@ -9,8 +9,8 @@ if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon
 fi
 
 # Variables
-API_URL="https://api.github.com/repos/justrals/KindleFetch/commits"
-REPO_URL="https://github.com/justrals/KindleFetch/archive/refs/heads/main.zip"
+API_URL="https://api.github.com/repos/kbdevs/KindleFetch/commits"
+REPO_URL="https://github.com/kbdevs/KindleFetch/archive/refs/heads/main.zip"
 ZIP_FILE="/mnt/us/repo.zip"
 EXTRACTED_DIR="/mnt/us/KindleFetch-main"
 INSTALL_DIR="/mnt/us/extensions/kindlefetch"
