@@ -23,19 +23,19 @@ lgli_download() {
     local clean_title=$(sanitize_filename "$title" | tr -d ' ')
     local final_location
 
-    echo -n "Do you want to change filename? [y/N] "
-    read confirm
-    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        echo -n "Enter your custom filename: "
-        read custom_filename
-        if [ -n "$custom_filename" ]; then
-            local clean_title=$(sanitize_filename "$custom_filename" | tr -d ' ')
-        else
-            echo "Invalid filename. Proceeding with original filename."
-        fi
-    else
-        echo "Proceeding with original filename."
-    fi
+    # echo -n "Do you want to change filename? [y/N] "
+    # read confirm
+    # if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+    #     echo -n "Enter your custom filename: "
+    #     read custom_filename
+    #     if [ -n "$custom_filename" ]; then
+    #         local clean_title=$(sanitize_filename "$custom_filename" | tr -d ' ')
+    #     else
+    #         echo "Invalid filename. Proceeding with original filename."
+    #     fi
+    # else
+    #     echo "Proceeding with original filename."
+    # fi
     
     if [ ! -w "$KINDLE_DOCUMENTS" ]; then
         echo "Error: No write permission in $KINDLE_DOCUMENTS" >&2
