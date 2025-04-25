@@ -13,8 +13,8 @@ display_books() {
     echo "--------------------------------"
     echo ""
     
-    i=0
-    while [ $i -lt $count ]; do
+    i=$((count-1))
+    while [ $i -ge 0 ]; do
         book_info=$(echo "$1" | awk -v i=$i 'BEGIN{RS="\\{"; FS="\\}"} NR==i+2{print $1}')
         title=$(get_json_value "$book_info" "title")
         author=$(get_json_value "$book_info" "author")
@@ -23,9 +23,6 @@ display_books() {
         
         if ! $COMPACT_OUTPUT; then
             printf "%2d. %s\n" $((i+1)) "$title"
-            [ -n "$author" ] && echo "    Author: $author"
-            [ -n "$format" ] && echo "    Format: $format"
-            echo "    -----"
             [ -n "$description" ] && [ "$description" != "null" ] && echo "    $description"
             echo ""
         else
@@ -34,7 +31,7 @@ display_books() {
             echo ""
         fi
         
-        i=$((i+1))
+        i=$((i-1))
     done
     
     echo "--------------------------------"
@@ -66,9 +63,14 @@ search_books() {
     fi
     
     echo "Searching for '$query' (page $page)..."
+
+    local filters=""
+    if [ -f /tmp/current_filters ]; then
+        filters=$(cat /tmp/current_filters)
+    fi
     
     encoded_query=$(echo "$query" | sed 's/ /+/g')
-    search_url="$ANNAS_URL/search?page=${page}&q=${encoded_query}"
+    search_url="$ANNAS_URL/search?page=${page}&q=${encoded_query}${filters}"
     local html_content=$(curl -s "$search_url") || html_content=$(curl -s -x "$PROXY_URL" "$search_url")
     
     local last_page=$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -nr | head -1 | cut -d= -f2 | tr -d '"')

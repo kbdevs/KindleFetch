@@ -30,17 +30,17 @@ first_time_setup() {
     else
         KINDLE_DOCUMENTS="/mnt/us/documents"
     fi
-    echo -n "Create subfolders for books? (true/false): "
+    echo -n "Create subfolders for books? [y/N]: "
     read subfolders_choice
-    if [ "$subfolders_choice" = "true" ] || [ "$subfolders_choice" = "false" ]; then
-        CREATE_SUBFOLDERS="$subfolders_choice"
+    if [ "$subfolders_choice" = "y" ] || [ "$subfolders_choice" = "Y" ]; then
+        CREATE_SUBFOLDERS="true"
     else
         CREATE_SUBFOLDERS="false"
     fi
-    echo -n "Enable compact output? (true/false): "
+    echo -n "Enable compact output? [y/N]: "
     read compact_choice
-    if [ "$compact_choice" = "true" ] || [ "$compact_choice" = "false" ]; then
-        COMPACT_OUTPUT="$compact_choice"
+    if [ "$compact_choice" = "y" ] || [ "$compact_choice" = "Y" ]; then
+        CREATE_SUBFOLDERS="true"
     else
         COMPACT_OUTPUT="false"
     fi

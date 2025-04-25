@@ -23,6 +23,7 @@ fi
 # Script imports
 . "$SCRIPT_DIR/downloads/zlib_download.sh"
 . "$SCRIPT_DIR/downloads/lgli_download.sh"
+. "$SCRIPT_DIR/filters.sh"
 . "$SCRIPT_DIR/search.sh"
 . "$SCRIPT_DIR/misc.sh"
 . "$SCRIPT_DIR/local_books.sh"
@@ -47,16 +48,17 @@ main_menu() {
 $(load_version) | https://github.com/justrals/KindleFetch
 "
         if $UPDATE_AVAILABLE; then
-            echo "Update available! Select option 5 to install."
+            echo "Update available! Select option 6 to install."
             echo ""
         fi
         echo "1. Search and download books"
-        echo "2. List my books"
-        echo "3. Settings"
-        echo "4. Exit"
+        echo "2. Search filters"
+        echo "3. List my books"
+        echo "4. Settings"
+        echo "5. Exit"
         if $UPDATE_AVAILABLE; then
             echo ""
-            echo "5. Install update"
+            echo "6. Install update"
         fi
         echo ""
         echo -n "Choose option: "
@@ -67,16 +69,19 @@ $(load_version) | https://github.com/justrals/KindleFetch
                 search_books
                 ;;
             2)
-                list_local_books
+                filters_menu
                 ;;
             3)
-                settings_menu
+                list_local_books
                 ;;
             4)
+                settings_menu
+                ;;
+            5)
                 cleanup
                 exit 0
                 ;;
-            5)  
+            6)  
                 if $UPDATE_AVAILABLE; then
                     update
                 fi
