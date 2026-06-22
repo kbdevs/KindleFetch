@@ -10,7 +10,7 @@ display_books() {
     local last_page="$5"
 
     local count
-    count="$(echo "$books" | grep -o '"title":' | wc -l)"
+    count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l)"
 
     local start=0
     local end=$((count - 1))
@@ -75,7 +75,7 @@ search_books() {
     
     local encoded_query=$(echo "$query" | sed 's/ /+/g')
     local search_url="$ANNAS_URL/search?page=${page}&q=${encoded_query}${filters}"
-    local html_content="$(curl -s "$search_url") || html_content=$(curl -s -x "$PROXY_URL" "$search_url")"
+    local html_content="$(curl -L -s -A "Mozilla/5.0" "$search_url") || html_content=$(curl -L -s -A "Mozilla/5.0" -x "$PROXY_URL" "$search_url")"
     
     local last_page="$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -t= -k2 -nr | head -1 | cut -d= -f2 | tr -d '"')"
     [ -z "$last_page" ] && last_page=1
@@ -92,9 +92,27 @@ search_books() {
     echo "$has_next" > "$TMP_DIR"/last_search_has_next
     echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
     
-    local books="$(echo $html_content | awk '
+    local books="$(printf "%s\n" "$html_content" | sed 's/<div class="flex  *pt-3/<KF_RECORD/g' | awk -v base_url="$ANNAS_URL" '
+        function clean_text(value) {
+            gsub(/<script[^>]*>[^<]*(<[^>]*>[^<]*)*<\/script>/, "", value)
+            gsub(/<[^>]*>/, "", value)
+            gsub(/&amp;/, "\\&", value)
+            gsub(/&#39;|&apos;/, "", value)
+            gsub(/&quot;/, "\"", value)
+            gsub(/&nbsp;/, " ", value)
+            gsub(/&[#a-zA-Z0-9]+;/, "", value)
+            gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", value)
+            gsub(/[ \t\r\n][ \t\r\n]+/, " ", value)
+            return value
+        }
+        function json_escape(value) {
+            gsub(/\\/, "\\\\", value)
+            gsub(/"/, "\\\"", value)
+            return value
+        }
         BEGIN {
-            RS = "<div class=\"flex pt-3 pb-3 border-b last:border-b-0 border-gray-100\">"
+            RS = "<KF_RECORD"
+            q = sprintf("%c", 34)
             print "["
             count = 0
         }
@@ -102,30 +120,41 @@ search_books() {
             title = ""; author = ""; md5 = ""; format = ""; description = ""
         
             # md5
-            if (match($0, /href="\/md5\/[a-f0-9]{32}"/)) {
+            if (match($0, /href="\/md5\/[a-f0-9][a-f0-9]*/)) {
                 md5 = substr($0, RSTART+11, 32)
             }
         
-            # title
-            if (match($0, /<div class="font-bold text-violet-900 line-clamp-\[5\]" data-content="[^"]+"/)) {
+            # title: prefer the visible result link, fall back to cover metadata.
+            if (match($0, /<a href="\/md5\/[a-f0-9][a-f0-9]*"[^>]*js-vim-focus[^>]*>[^<]+<\/a>/)) {
+                title = clean_text(substr($0, RSTART, RLENGTH))
+            } else if (match($0, /<div class="font-bold text-violet-900 line-clamp-\[5\]" data-content="[^"]+"/)) {
                 block = substr($0, RSTART, RLENGTH)
                 if (match(block, /data-content="[^"]+"/)) {
                     title = substr(block, RSTART+14, RLENGTH-15)
+                    title = clean_text(title)
                 }
             }
         
-            # author
-            if ($0 ~ /<div[^>]*class="[^"]*font-bold[^"]*text-amber-900[^"]*line-clamp-\[2\][^"]*"/) {
+            # author: first visible author search link, fall back to cover metadata.
+            if (match($0, /<a href="\/search\?q=[^"]+"[^>]*><span[^>]*><\/span>[^<]+<\/a>/)) {
+                author = clean_text(substr($0, RSTART, RLENGTH))
+            } else if ($0 ~ /<div[^>]*class="[^"]*font-bold[^"]*text-amber-900[^"]*line-clamp-\[2\][^"]*"/) {
                 if (match($0, /<div[^>]*class="[^"]*font-bold[^"]*text-amber-900[^"]*line-clamp-\[2\][^"]*" data-content="[^"]+"/)) {
                     block = substr($0, RSTART, RLENGTH)
                     if (match(block, /data-content="[^"]+"/)) {
                         author = substr(block, RSTART+14, RLENGTH-15)
+                        author = clean_text(author)
                     }
                 }
             }
         
             # format
-            if (match($0, /<div class="text-gray-800[^>]*>[^<]+/)) {
+            if (match($0, /font-mono">[^<]+\.(epub|pdf|mobi|azw3|txt|fb2|djvu|cbz|cbr)/)) {
+                line = substr($0, RSTART, RLENGTH)
+                if (match(line, /\.(epub|pdf|mobi|azw3|txt|fb2|djvu|cbz|cbr)/)) {
+                    format = substr(line, RSTART+1, RLENGTH-1)
+                }
+            } else if (match($0, /<div class="text-gray-800[^>]*>[^<]+/)) {
                 line = substr($0, RSTART, RLENGTH)
                 if (match(line, />[^<]+/)) {
                     content = substr(line, RSTART+1, RLENGTH-1)
@@ -140,33 +169,30 @@ search_books() {
             if (match($0, /<div[^>]*class="[^"]*text-gray-800[^"]*font-semibold[^"]*text-sm[^"]*leading-\[1\.2\][^"]*mt-2[^"]*"[^>]*>.*?<\/div>/)) {
                 line = substr($0, RSTART, RLENGTH)
 
-                gsub(/<script[^>]*>[^<]*(<[^>]*>[^<]*)*<\/script>/, "", line)
-
-                gsub(/<a[^>]*>[^<]*(<[^>]*>[^<]*)*<\/a>/, "", line)
-
-                gsub(/<[^>]*>/, "", line)
-
-                gsub(/&[#a-zA-Z0-9]+;/, "", line)
-
-                gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", line)
-
-                description = line
+                description = clean_text(line)
             }
         
             # emoji replacements
             gsub(/🚀/, "Partner Server", description)
             gsub(/📗|📘|📕|📰|💬|📝|🤨|🎶|✅/, "", description)
         
-            # escape double quotes
-            gsub(/"/, "\\\"", title)
-            gsub(/"/, "\\\"", author)
-            gsub(/"/, "\\\"", description)
+            title = json_escape(title)
+            author = json_escape(author)
+            description = json_escape(description)
         
-            if (title != "") {
+            if (title != "" && md5 != "" && !seen[md5]) {
+                seen[md5] = 1
                 if (count > 0) {
                     printf ",\n"
                 }
-                printf "  {\"author\": \"%s\", \"format\": \"%s\", \"md5\": \"%s\", \"title\": \"%s\", \"url\": \"%s/md5/%s\", \"description\": \"%s\"}", author, format, md5, title, base_url, md5, description
+                print "  {"
+                print "author=" author
+                print "format=" format
+                print "md5=" md5
+                print "title=" title
+                print "url=" base_url "/md5/" md5
+                print "description=" description
+                printf "}"
                 count++
             }
         }
@@ -184,7 +210,7 @@ search_books() {
         local has_next="$(cat "$TMP_DIR"/last_search_has_next 2>/dev/null || echo "false")"
         local has_prev="$(cat "$TMP_DIR"/last_search_has_prev 2>/dev/null || echo "false")"
         local books="$(cat "$TMP_DIR"/search_results.json 2>/dev/null)"
-        local count="$(echo "$books" | grep -o '"title":' | wc -l)"
+        local count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l)"
 
         display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
         

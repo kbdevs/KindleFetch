@@ -88,6 +88,12 @@ sanitize_filename() {
 }
 
 get_json_value() {
+    value="$(printf "%s\n" "$1" | sed -n "s/^$2=//p" | head -1)"
+    if [ -n "$value" ]; then
+        printf "%s\n" "$value"
+        return 0
+    fi
+
     echo "$1" | grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed "s/\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\"/\1/" || \
     echo "$1" | grep -o "\"$2\"[[:space:]]*:[[:space:]]*[^,}]*" | sed "s/\"$2\"[[:space:]]*:[[:space:]]*\([^,}]*\)/\1/"
 }
