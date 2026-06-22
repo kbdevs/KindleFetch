@@ -14,10 +14,14 @@ if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon
 fi
 
 # Variables
-API_URL="https://api.github.com/repos/justrals/KindleFetch/commits"
-REPO_URL="https://github.com/justrals/KindleFetch/archive/refs/heads/main.zip"
+KF_REPO_OWNER="${KF_REPO_OWNER:-kbdevs}"
+KF_REPO_NAME="${KF_REPO_NAME:-kindlefetch}"
+KF_REPO_BRANCH="${KF_REPO_BRANCH:-main}"
+KF_REPO_SLUG="${KF_REPO_OWNER}/${KF_REPO_NAME}"
+API_URL="https://api.github.com/repos/${KF_REPO_SLUG}/commits?per_page=1"
+REPO_URL="https://github.com/${KF_REPO_SLUG}/archive/refs/heads/${KF_REPO_BRANCH}.zip"
 ZIP_FILE="/mnt/us/repo.zip"
-EXTRACTED_DIR="/mnt/us/KindleFetch-main"
+EXTRACTED_DIR="/mnt/us/${KF_REPO_NAME}-${KF_REPO_BRANCH}"
 INSTALL_DIR="/mnt/us/extensions/kindlefetch"
 CONFIG_FILE="$INSTALL_DIR/bin/kindlefetch_config"
 TEMP_CONFIG="/mnt/us/kindlefetch_config"
@@ -49,8 +53,8 @@ if [ -f "$ZLIB_COOKIES_FILE" ]; then
     cp -f "$ZLIB_COOKIES_FILE" "$TEMP_ZLIB_COOKIES_FILE"
 fi
 
-echo "Downloading KindleFetch..."
-curl -s -L -o "$ZIP_FILE" "$REPO_URL"
+echo "Downloading KindleFetch from ${KF_REPO_SLUG}/${KF_REPO_BRANCH}..."
+curl -fsSL -o "$ZIP_FILE" "$REPO_URL"
 echo "Download complete."
 
 echo "Extracting files..."
@@ -64,6 +68,7 @@ rm -rf "$INSTALL_DIR"
 echo "Installing KindleFetch..."
 mkdir -p "$INSTALL_DIR"
 mv -f "$EXTRACTED_DIR/kindlefetch"/* "$INSTALL_DIR/"
+chmod +x "$INSTALL_DIR/run.sh" "$INSTALL_DIR"/bin/*.sh "$INSTALL_DIR"/bin/downloads/*.sh 2>/dev/null || true
 echo "Installation successful."
 
 echo "Creating version file..."

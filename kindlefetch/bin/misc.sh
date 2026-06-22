@@ -1,5 +1,56 @@
 #!/bin/sh
 
+KF_REPO_OWNER="${KF_REPO_OWNER:-kbdevs}"
+KF_REPO_NAME="${KF_REPO_NAME:-kindlefetch}"
+KF_REPO_BRANCH="${KF_REPO_BRANCH:-main}"
+configure_update_channel() {
+    KF_REPO_OWNER="${KF_REPO_OWNER:-kbdevs}"
+    KF_REPO_NAME="${KF_REPO_NAME:-kindlefetch}"
+    KF_REPO_BRANCH="${KF_REPO_BRANCH:-main}"
+    KF_REPO_SLUG="${KF_REPO_OWNER}/${KF_REPO_NAME}"
+    KF_GITHUB_API="https://api.github.com/repos/${KF_REPO_SLUG}"
+    KF_RAW_BASE="https://raw.githubusercontent.com/${KF_REPO_SLUG}/${KF_REPO_BRANCH}"
+    KF_ARCHIVE_URL="https://github.com/${KF_REPO_SLUG}/archive/refs/heads/${KF_REPO_BRANCH}.zip"
+}
+
+configure_update_channel
+
+draw_header() {
+    title="$1"
+    subtitle="$2"
+    clear
+    printf '%s\n' '================================================'
+    printf ' KindleFetch'
+    [ -n "$title" ] && printf ' - %s' "$title"
+    printf '\n'
+    [ -n "$subtitle" ] && printf ' %s\n' "$subtitle"
+    printf '%s\n\n' '================================================'
+}
+
+pause() {
+    printf '\nPress Enter to continue...'
+    read -r _
+}
+
+yes_no() {
+    prompt="$1"
+    default="$2"
+    if [ "$default" = "yes" ]; then
+        suffix="[Y/n]"
+    else
+        suffix="[y/N]"
+    fi
+
+    printf '%s %s: ' "$prompt" "$suffix"
+    read -r answer
+    case "$answer" in
+        y|Y|yes|YES) return 0 ;;
+        n|N|no|NO) return 1 ;;
+        "") [ "$default" = "yes" ] ;;
+        *) return 1 ;;
+    esac
+}
+
 change_dns () {
     RESOLV_FILE="/var/run/resolv.conf"
     
@@ -14,7 +65,9 @@ change_dns () {
 }
 
 load_config() {
-    eval "$(base64 -d "$LINK_CONFIG_FILE")"
+    if [ -f "$LINK_CONFIG_FILE" ]; then
+        eval "$(base64 -d < "$LINK_CONFIG_FILE" 2>/dev/null || base64 -D < "$LINK_CONFIG_FILE" 2>/dev/null || true)"
+    fi
     if [ -f "$CONFIG_FILE" ]; then
         . "$CONFIG_FILE"
     else
@@ -26,10 +79,6 @@ load_version() {
     if [ -f "$VERSION_FILE" ]; then
         cat "$VERSION_FILE"
     else
-        echo "Version file wasn't found!"
-        sleep 2
-        echo "Creating version file"
-        sleep 2
         get_version
     fi
 }
@@ -58,7 +107,7 @@ cleanup() {
 }
 
 get_version() {
-    local api_response="$(curl -s -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/justrals/KindleFetch/commits")" || {
+    local api_response="$(curl -s -H "Accept: application/vnd.github.v3+json" "${KF_GITHUB_API}/commits?per_page=1")" || {
         echo "Failed to fetch version from GitHub API" >&2
         echo "unknown"
         return
@@ -75,7 +124,7 @@ check_for_updates() {
     
     local latest_sha="$(curl -s -H "Accept: application/vnd.github.v3+json" \
         -H "Cache-Control: no-cache" \
-        "https://api.github.com/repos/justrals/KindleFetch/commits?per_page=1" | \
+        "${KF_GITHUB_API}/commits?per_page=1" | \
         grep -oE '"sha": "[0-9a-f]+"' | head -1 | cut -d'"' -f4 | cut -c1-7)"
     
     if [ -n "$latest_sha" ] && [ "$current_sha" != "$latest_sha" ]; then
@@ -99,6 +148,9 @@ save_config() {
         echo "ANNAS_URL=\"$ANNAS_URL\""
         echo "LGLI_URL=\"$LGLI_URL\""
         echo "ZLIB_URL=\"$ZLIB_URL\""
+        echo "KF_REPO_OWNER=\"$KF_REPO_OWNER\""
+        echo "KF_REPO_NAME=\"$KF_REPO_NAME\""
+        echo "KF_REPO_BRANCH=\"$KF_REPO_BRANCH\""
     } > "$CONFIG_FILE"
 }
 

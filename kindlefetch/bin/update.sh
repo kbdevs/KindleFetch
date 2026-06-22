@@ -2,23 +2,20 @@
 
 update() {
 	if [ "$UPDATE_AVAILABLE" = true ]; then
-        echo -n "Would you like to update? [Y/n]: "
-        read -r confirm
-
-        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ] || [ -z "$confirm" ]; then
+        if yes_no "Install update from ${KF_REPO_SLUG}/${KF_REPO_BRANCH}?" "yes"; then
             echo "Installing update..."
-            if curl -s https://justrals.github.io/KindleFetch/install.sh | sh; then
+            if curl -fsSL "${KF_RAW_BASE}/install.sh" | sh; then
                 echo "Update installed successfully!"
                 UPDATE_AVAILABLE=false
                 VERSION=$(load_version)
-                exec exit 0
+                exit 0
             else
                 echo "Failed to install update"
-                sleep 2
+                pause
             fi
         fi
     else
         echo "You're up-to-date!"
-        sleep 2
+        pause
     fi
 }

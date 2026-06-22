@@ -1,8 +1,6 @@
 #!/bin/sh
 
 # KindleFetch
-# Made by justrals
-# https://github.com/justrals/KindleFetch
 
 # Variables
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
@@ -36,12 +34,14 @@ fi
 . "$SCRIPT_DIR/search.sh"
 . "$SCRIPT_DIR/misc.sh"
 . "$SCRIPT_DIR/local_books.sh"
+. "$SCRIPT_DIR/airdrop.sh"
 . "$SCRIPT_DIR/update.sh"
 . "$SCRIPT_DIR/setup.sh"
 . "$SCRIPT_DIR/settings.sh"
 
-check_for_updates
 load_config
+configure_update_channel
+check_for_updates
 
 [ -z "$ANNAS_URL" ] && ANNAS_URL=$(find_working_url $ANNAS_MIRROR_URLS)
 [ -z "$LGLI_URL" ] && LGLI_URL=$(find_working_url $LGLI_MIRROR_URLS)
@@ -55,31 +55,23 @@ main_menu() {
     fi
     
     while true; do
-        clear
-        echo -e "
- _  ___           _ _      ______   _       _     
-| |/ (_)         | | |    |  ____| | |     | |    
-| ' / _ _ __   __| | | ___| |__ ___| |_ ___| |__  
-|  < | | '_ \ / _\` | |/ _ \  __/ _ \ __/ __| '_ \\ 
-| . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
-|_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
-                                                
-$(load_version) | https://github.com/justrals/KindleFetch
-"
+        draw_header "Main Menu" "$(load_version) | https://github.com/${KF_REPO_SLUG}"
         if $UPDATE_AVAILABLE; then
-            echo "Update available! Select option 6 to install."
-            echo ""
+            echo "[!] Update available. Use option 6 to install it."
+            echo
         fi
-        echo "1. Search and download books"
-        echo "2. Filter search results"
-        echo "3. List my books"
-        echo "4. Settings"
-        echo "q. Exit"
+        echo "1. Search and download"
+        echo "2. Filters"
+        echo "3. My books"
+        echo "4. AirDrop"
+        echo "5. Settings"
         if $UPDATE_AVAILABLE; then
-            echo ""
+            echo
             echo "6. Install update"
         fi
-        echo ""
+        echo
+        echo "q. Exit"
+        echo
         echo -n "Choose option: "
         read -r choice
         
@@ -94,6 +86,9 @@ $(load_version) | https://github.com/justrals/KindleFetch
                 list_local_books
                 ;;
             4)
+                airdrop_menu
+                ;;
+            5)
                 settings_menu
                 ;;
             [qQ])

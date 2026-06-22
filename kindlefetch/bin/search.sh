@@ -1,17 +1,7 @@
 #!/bin/sh
 
 display_books() {
-    clear
-    echo -e "
-  _____                     _     
- / ____|                   | |    
-| (___   ___  __ _ _ __ ___| |__  
- \___ \ / _ \/ _\` | '__/ __| '_ \\ 
- ____) |  __/ (_| | | | (__| | | |
-|_____/ \___|\__,_|_|  \___|_| |_|
-"
-    echo "--------------------------------"
-    echo ""
+    draw_header "Search" "Choose a result to download"
 
     local books="$1"
     local page="$2"
@@ -22,13 +12,11 @@ display_books() {
     local count
     count="$(echo "$books" | grep -o '"title":' | wc -l)"
 
-    local display_index=1
-    local start=$(( (page - 1) * RESULTS_PER_PAGE ))
-    local end=$(( start + RESULTS_PER_PAGE - 1 ))
-    [ "$end" -ge "$count" ] && end=$((count - 1))
+    local start=0
+    local end=$((count - 1))
 
-    i=$((end))
-    while [ "$i" -ge "$start" ]; do
+    i=$start
+    while [ "$i" -le "$end" ]; do
         book_info="$(echo "$books" | awk -v i=$i 'BEGIN{RS="\\{"; FS="\\}"} NR==i+2{print $1}')"
 
         title="$(get_json_value "$book_info" "title")"
@@ -38,6 +26,8 @@ display_books() {
 
         if [ "$COMPACT_OUTPUT" != true ]; then
             printf "%2d. %s\n" "$((i+1))" "$title"
+            [ -n "$author" ] && [ "$author" != "null" ] && echo "    by $author"
+            [ -n "$format" ] && [ "$format" != "null" ] && echo "    $format"
             [ -n "$description" ] && [ "$description" != "null" ] && echo "    $description"
             echo ""
         else
@@ -46,11 +36,10 @@ display_books() {
             echo ""
         fi
 
-        display_index=$((display_index + 1))
-        i=$((i - 1))
+        i=$((i + 1))
     done
 
-    local items_on_page=$(( end - start + 1 ))
+    local items_on_page="$count"
 
     echo "--------------------------------"
     echo ""
@@ -60,7 +49,7 @@ display_books() {
     [ "$has_prev" = true ] && echo -n "p: Previous page | "
     echo -n "t[1-$last_page]: Select page | "
     [ "$has_next" = true ] && echo -n "n: Next page | "
-    echo "1-$items_on_page: Select book | q: Quit"
+    [ "$items_on_page" -gt 0 ] && echo "1-$items_on_page: Select book | q: Quit" || echo "q: Quit"
     echo ""
 }
 
@@ -209,12 +198,8 @@ search_books() {
             [pP])
                 if [ "$has_prev" = true ]; then
                     new_page=$((current_page - 1))
-                    echo "$new_page" > "$TMP_DIR"/last_search_page
-                    has_prev="$([ "$new_page" -gt 1 ] && echo "true" || echo "false")"
-                    has_next="$([ "$new_page" -lt "$last_page" ] && echo "true" || echo "false")"
-                    echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
-                    echo "$has_next" > "$TMP_DIR"/last_search_has_next
-                    continue
+                    search_books "$query" "$new_page"
+                    return
                 else
                     echo "Already on first page"
                     sleep 2
@@ -223,12 +208,8 @@ search_books() {
             [nN])
                 if [ "$has_next" = true ]; then
                     new_page=$((current_page + 1))
-                    echo "$new_page" > "$TMP_DIR"/last_search_page
-                    has_prev="$([ "$new_page" -gt 1 ] && echo "true" || echo "false")"
-                    has_next="$([ "$new_page" -lt "$last_page" ] && echo "true" || echo "false")"
-                    echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
-                    echo "$has_next" > "$TMP_DIR"/last_search_has_next
-                    continue
+                    search_books "$query" "$new_page"
+                    return
                 else
                     echo "Already on last page"
                     sleep 2
@@ -239,12 +220,8 @@ search_books() {
                 if echo "$page_number" | grep -qE '^[0-9]+$'; then
                     if [ "$page_number" -ge 1 ] && [ "$page_number" -le "$last_page" ]; then
                         if [ "$page_number" -ne "$current_page" ]; then
-                            echo "$page_number" > "$TMP_DIR"/last_search_page
-                            has_prev="$([ "$page_number" -gt 1 ] && echo "true" || echo "false")"
-                            has_next="$([ "$page_number" -lt "$last_page" ] && echo "true" || echo "false")"
-                            echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
-                            echo "$has_next" > "$TMP_DIR"/last_search_has_next
-                            continue
+                            search_books "$query" "$page_number"
+                            return
                         else
                             echo "You are already on page $current_page"
                             sleep 2
@@ -260,27 +237,20 @@ search_books() {
                 ;;
             *)  
                 if echo "$choice" | grep -qE '^[0-9]+$'; then
-                    local start=$(( (current_page - 1) * RESULTS_PER_PAGE ))
-                    local end=$(( start + RESULTS_PER_PAGE - 1 ))
-                    [ "$end" -ge "$count" ] && end=$((count - 1))
-                    local items_on_page=$(( end - start + 1 ))
+                    local items_on_page="$count"
 
-                    if [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
+                    if [ "$choice" -ge 1 ] && [ "$choice" -le "$items_on_page" ]; then
                         absolute_index=$(( choice - 1 ))
 
                         book_info="$(awk -v i=$absolute_index \
                             'BEGIN{RS="\\{"; FS="\\}"} NR==i+2{print $1}' \
                             "$TMP_DIR"/search_results.json)"
 
+                        local md5="$(get_json_value "$book_info" "md5")"
                         local lgli_available=false
                         local zlib_available=false
-
-                        if echo "$book_info" | grep -q "lgli"; then
-                            lgli_available=true
-                        fi
-                        if echo "$book_info" | grep -q "zlib"; then
-                            zlib_available=true
-                        fi
+                        [ -n "$md5" ] && [ -n "$LGLI_URL" ] && lgli_available=true
+                        [ -n "$md5" ] && [ -n "$ZLIB_URL" ] && zlib_available=true
 
                         while true; do
                             if [ "$lgli_available" = false ] && [ "$zlib_available" = false ]; then
@@ -381,8 +351,7 @@ search_books() {
                             esac
                         done
 
-                        printf "\nPress any key to continue..."
-                        read -n 1 -s
+                        pause
                     else
                         echo "Invalid selection (must be between 1 and $items_on_page)"
                         sleep 2
