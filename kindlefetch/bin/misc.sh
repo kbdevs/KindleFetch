@@ -1,11 +1,11 @@
 #!/bin/sh
 
 KF_REPO_OWNER="${KF_REPO_OWNER:-kbdevs}"
-KF_REPO_NAME="${KF_REPO_NAME:-kindlefetch}"
+KF_REPO_NAME="${KF_REPO_NAME:-KindleFetch}"
 KF_REPO_BRANCH="${KF_REPO_BRANCH:-main}"
 configure_update_channel() {
     KF_REPO_OWNER="${KF_REPO_OWNER:-kbdevs}"
-    KF_REPO_NAME="${KF_REPO_NAME:-kindlefetch}"
+    KF_REPO_NAME="${KF_REPO_NAME:-KindleFetch}"
     KF_REPO_BRANCH="${KF_REPO_BRANCH:-main}"
     KF_REPO_SLUG="${KF_REPO_OWNER}/${KF_REPO_NAME}"
     KF_GITHUB_API="https://api.github.com/repos/${KF_REPO_SLUG}"
