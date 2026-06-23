@@ -9,6 +9,13 @@ KINDLE_KEY="${KINDLE_KEY:-/tmp/kindlefetch_ssh_key}"
 REMOTE_BIN="/mnt/us/extensions/kindlefetch/bin"
 SSH_OPTS="-i $KINDLE_KEY -p $KINDLE_PORT -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/kindlefetch_known_hosts"
 
+if ! nc -z -w 5 "$KINDLE_HOST" "$KINDLE_PORT" >/dev/null 2>&1; then
+    echo "Kindle SSH is not reachable at $KINDLE_HOST:$KINDLE_PORT" >&2
+    echo "On the Kindle, run:" >&2
+    echo "  curl -L https://github.com/kbdevs/KindleFetch/raw/main/install.sh?5|sh" >&2
+    exit 2
+fi
+
 ssh_kindle() {
     ssh $SSH_OPTS "$KINDLE_USER@$KINDLE_HOST" "$@"
 }
