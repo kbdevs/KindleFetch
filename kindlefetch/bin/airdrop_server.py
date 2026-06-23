@@ -23,6 +23,8 @@ if os.path.isdir(VENDOR_DIR) and VENDOR_DIR not in sys.path:
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("KINDLEFETCH_AIRDROP_PORT", "8088"))
 TOKEN = os.environ.get("KINDLEFETCH_AIRDROP_TOKEN") or secrets.token_urlsafe(8)
+COMMAND_TIMEOUT = int(os.environ.get("KINDLEFETCH_AIRDROP_COMMAND_TIMEOUT", "20"))
+COMMAND_OUTPUT_LIMIT = int(os.environ.get("KINDLEFETCH_AIRDROP_COMMAND_OUTPUT_LIMIT", "20000"))
 
 
 def local_ips():
@@ -173,13 +175,14 @@ body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", san
 header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 22px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:1; }
 h1 { margin:0; font-size:20px; letter-spacing:0; }
 main { max-width:980px; margin:0 auto; padding:20px; }
-.toolbar, .crumbs, .dropzone, .table-wrap { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+.toolbar, .crumbs, .dropzone, .table-wrap, .command-panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
 .toolbar { display:grid; grid-template-columns:1fr auto auto; gap:10px; padding:12px; align-items:center; }
 .crumbs { margin:14px 0; padding:12px; color:var(--muted); overflow-wrap:anywhere; }
 .dropzone { margin-bottom:14px; padding:18px; text-align:center; border-style:dashed; color:var(--muted); }
 .dropzone.drag { border-color:var(--accent); color:var(--accent); background:#edf6f3; }
 input, button { font:inherit; }
 input[type=text] { width:100%; padding:10px 11px; border:1px solid var(--line); border-radius:6px; background:white; color:var(--ink); }
+textarea { width:100%; min-height:76px; padding:10px 11px; border:1px solid var(--line); border-radius:6px; background:white; color:var(--ink); font:13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize:vertical; }
 input[type=file] { max-width:100%; }
 button, .button { border:1px solid var(--line); background:#fff; color:var(--ink); padding:9px 11px; border-radius:6px; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; min-height:38px; }
 button.primary { background:var(--accent); color:white; border-color:var(--accent); }
@@ -193,9 +196,12 @@ tr:last-child td { border-bottom:0; }
 .actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .status { min-height:24px; color:var(--muted); margin-top:12px; }
 .empty { padding:28px; text-align:center; color:var(--muted); }
+.command-panel { margin-top:14px; padding:12px; }
+.command-row { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:start; }
+.command-output { margin:12px 0 0; padding:12px; min-height:54px; max-height:320px; overflow:auto; background:#111; color:#f3f5f4; border-radius:6px; white-space:pre-wrap; font:12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 @media (max-width:720px) {
   header { align-items:flex-start; flex-direction:column; }
-  .toolbar { grid-template-columns:1fr; }
+  .toolbar, .command-row { grid-template-columns:1fr; }
   th.size, td.size { display:none; }
   .actions { justify-content:flex-start; }
 }
@@ -217,6 +223,13 @@ tr:last-child td { border-bottom:0; }
       <tbody id="files" data-testid="files-body"></tbody>
     </table>
     <div id="empty" class="empty" hidden>No files here yet.</div>
+  </section>
+  <section class="command-panel" data-testid="command-panel">
+    <div class="command-row">
+      <textarea id="command-input" data-testid="command-input" placeholder="Run a Kindle shell command, e.g. ls -la /mnt/us/documents"></textarea>
+      <button id="run-command" data-testid="run-command-btn" class="primary" type="button">Run</button>
+    </div>
+    <pre id="command-output" data-testid="command-output" class="command-output"></pre>
   </section>
   <div id="status" class="status" role="status"></div>
 </main>
@@ -331,6 +344,19 @@ $("create-folder").onclick = async () => {
 };
 $("file-input").onchange = (e) => upload(e.target.files).catch(err => setStatus(err.message));
 $("refresh").onclick = () => load().catch(err => setStatus(err.message));
+$("run-command").onclick = async () => {
+  const command = $("command-input").value.trim();
+  if (!command) return setStatus("Enter a command.");
+  $("command-output").textContent = "Running...";
+  try {
+    const data = await request("/api/command", { command });
+    $("command-output").textContent = `$ ${command}\n\n${data.output || ""}`;
+    setStatus(`Command exited ${data.returncode}.`);
+  } catch (e) {
+    $("command-output").textContent = e.message;
+    setStatus(e.message);
+  }
+};
 const dz = $("dropzone");
 dz.ondragover = (e) => { e.preventDefault(); dz.classList.add("drag"); };
 dz.ondragleave = () => dz.classList.remove("drag");
@@ -391,6 +417,10 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/download":
             params = urllib.parse.parse_qs(parsed.query)
             self.download(params.get("path", [""])[0])
+        elif parsed.path == "/run":
+            params = urllib.parse.parse_qs(parsed.query)
+            command = params.get("cmd", [""])[0]
+            self.run_command(command, as_json=False)
         else:
             self.send_error_json(404, "Not found")
 
@@ -424,6 +454,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True})
             elif parsed.path == "/api/upload":
                 self.upload()
+            elif parsed.path == "/api/command":
+                data = read_json(self)
+                self.run_command(data.get("command", ""), as_json=True)
             else:
                 self.send_error_json(404, "Not found")
         except Exception as exc:
@@ -480,6 +513,44 @@ class Handler(BaseHTTPRequestHandler):
                 shutil.copyfileobj(field.file, out)
             count += 1
         self.send_json(200, {"ok": True, "count": count})
+
+    def run_command(self, command, as_json=True):
+        command = (command or "").strip()
+        if not command:
+            if as_json:
+                self.send_error_json(400, "Command is empty")
+            else:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b"Command is empty")
+            return
+
+        try:
+            completed = subprocess.run(
+                ["/bin/sh", "-lc", command],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=COMMAND_TIMEOUT,
+            )
+            output = completed.stdout.decode("utf-8", "replace")
+            if len(output) > COMMAND_OUTPUT_LIMIT:
+                output = output[-COMMAND_OUTPUT_LIMIT:]
+                output = "[output truncated]\n" + output
+            payload = {"ok": completed.returncode == 0, "returncode": completed.returncode, "output": output}
+        except subprocess.TimeoutExpired as exc:
+            output = (exc.stdout or b"").decode("utf-8", "replace")
+            payload = {"ok": False, "returncode": 124, "output": output + "\nCommand timed out."}
+
+        if as_json:
+            self.send_json(200, payload)
+        else:
+            body = ("$ %s\n\n%s\n(exit %s)\n" % (command, payload["output"], payload["returncode"])).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
 
 if __name__ == "__main__":
