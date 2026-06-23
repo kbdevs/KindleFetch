@@ -4,6 +4,7 @@ BASE_DIR="${BASE_DIR:-/mnt/us}"
 AIR_DROP_PORT="${KINDLEFETCH_AIRDROP_PORT:-8088}"
 AIR_DROP_SSH_PORT="${KINDLEFETCH_AIRDROP_SSH_PORT:-2222}"
 KOREADER_DIR="${KINDLEFETCH_KOREADER_DIR:-/mnt/us/koreader}"
+DEFAULT_SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfqveHpAjlmJ0InRVvnI/7NlVcsIbXlXdSVaWxV2JyN kindlefetch"
 
 find_httpd() {
     if command -v httpd >/dev/null 2>&1; then
@@ -64,6 +65,11 @@ start_airdrop_ssh() {
     pid_file="/tmp/dropbear_koreader.pid"
     key_dir="$KOREADER_DIR/settings/SSH"
     mkdir -p "$key_dir" 2>/dev/null || true
+    ssh_pubkey="${KINDLEFETCH_SSH_PUBKEY:-$DEFAULT_SSH_PUBKEY}"
+    if [ -n "$ssh_pubkey" ]; then
+        printf '%s\n' "$ssh_pubkey" > "$key_dir/authorized_keys"
+        chmod 600 "$key_dir/authorized_keys" 2>/dev/null || true
+    fi
 
     if netstat -ln 2>/dev/null | grep "[.:]$AIR_DROP_SSH_PORT " >/dev/null 2>&1; then
         return 0
@@ -94,6 +100,7 @@ stop_airdrop_ssh() {
 
 print_ssh_commands() {
     echo "From your Mac:"
+    echo "  ssh kindle"
     for ip in $(get_lan_ips); do
         echo "  ssh -p $AIR_DROP_SSH_PORT root@$ip"
         echo "  scp -P $AIR_DROP_SSH_PORT file.epub root@$ip:/mnt/us/documents/"

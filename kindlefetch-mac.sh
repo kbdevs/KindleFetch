@@ -5,7 +5,7 @@ set -u
 KINDLE_HOST="${KINDLE_HOST:-192.168.4.75}"
 KINDLE_PORT="${KINDLE_PORT:-2222}"
 KINDLE_USER="${KINDLE_USER:-root}"
-KINDLE_KEY="${KINDLE_KEY:-/tmp/kindlefetch_ssh_key}"
+KINDLE_KEY="${KINDLE_KEY:-$HOME/.ssh/kindlefetch_ed25519}"
 REMOTE_BIN="${REMOTE_BIN:-/mnt/us/extensions/kindlefetch/bin}"
 KF_INSTALL_URL="${KF_INSTALL_URL:-https://github.com/kbdevs/KindleFetch/raw/main/install.sh}"
 
