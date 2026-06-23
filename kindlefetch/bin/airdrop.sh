@@ -48,6 +48,53 @@ fetch_local_airdrop() {
     return 2
 }
 
+find_airdrop_pids() {
+    ps 2>/dev/null | awk -v port="$AIR_DROP_PORT" '/[h]ttpd/ && $0 ~ port { print $1 }'
+}
+
+stop_airdrop_httpd() {
+    if [ -f "$pid_file" ]; then
+        old_pid="$(cat "$pid_file" 2>/dev/null)"
+        [ -n "$old_pid" ] && kill "$old_pid" 2>/dev/null || true
+    fi
+    for old_pid in $(find_airdrop_pids); do
+        kill "$old_pid" 2>/dev/null || true
+    done
+}
+
+start_airdrop_httpd() {
+    httpd_cmd="$1"
+    web_root="$2"
+    log_file="$3"
+
+    : > "$log_file" 2>/dev/null || true
+
+    $httpd_cmd -p "$AIR_DROP_PORT" -h "$web_root" >>"$log_file" 2>&1
+    sleep 1
+    fetch_local_airdrop
+    if [ "$?" != "1" ]; then
+        find_airdrop_pids | head -1 > "$pid_file"
+        return 0
+    fi
+
+    $httpd_cmd -p "0.0.0.0:$AIR_DROP_PORT" -h "$web_root" >>"$log_file" 2>&1
+    sleep 1
+    fetch_local_airdrop
+    if [ "$?" != "1" ]; then
+        find_airdrop_pids | head -1 > "$pid_file"
+        return 0
+    fi
+
+    $httpd_cmd -f -p "$AIR_DROP_PORT" -h "$web_root" >>"$log_file" 2>&1 &
+    httpd_pid="$!"
+    echo "$httpd_pid" > "$pid_file"
+    sleep 1
+    fetch_local_airdrop
+    [ "$?" != "1" ] && return 0
+
+    return 1
+}
+
 write_airdrop_site() {
     web_root="$1"
     cgi_dir="$web_root/cgi-bin"
@@ -99,7 +146,7 @@ cmd=$(printf '%s' "$QUERY_STRING" | sed 's/^cmd=//' | sed 's/+/ /g;s/%20/ /g;s/%
 cd /mnt/us 2>/dev/null || cd /
 echo "$ $cmd"
 echo
-/bin/sh -lc "$cmd" 2>&1
+/bin/sh -c "$cmd" 2>&1
 rc=$?
 echo
 echo "(exit $rc)"
@@ -120,10 +167,10 @@ airdrop_menu() {
 
     web_root="/tmp/kindlefetch-airdrop-www"
     pid_file="/tmp/kindlefetch-airdrop-httpd.pid"
+    log_file="/tmp/kindlefetch-airdrop-httpd.log"
 
     if [ -f "$pid_file" ]; then
-        old_pid="$(cat "$pid_file" 2>/dev/null)"
-        [ -n "$old_pid" ] && kill "$old_pid" 2>/dev/null || true
+        stop_airdrop_httpd
     fi
 
     rm -rf "$web_root"
@@ -133,19 +180,22 @@ airdrop_menu() {
         return 1
     }
 
-    $httpd_cmd -f -p "0.0.0.0:$AIR_DROP_PORT" -h "$web_root" &
-    httpd_pid="$!"
-    echo "$httpd_pid" > "$pid_file"
-    sleep 1
-
-    fetch_local_airdrop
-    selftest_rc="$?"
-    if [ "$selftest_rc" = "1" ]; then
-        kill "$httpd_pid" 2>/dev/null || true
+    if ! start_airdrop_httpd "$httpd_cmd" "$web_root" "$log_file"; then
+        stop_airdrop_httpd
         rm -rf "$web_root" "$pid_file"
         draw_header "AirDrop" "Server failed"
         echo "AirDrop httpd started but did not answer locally."
         echo "Tried: http://127.0.0.1:$AIR_DROP_PORT/"
+        echo
+        echo "httpd command: $httpd_cmd"
+        echo "Diagnostics:"
+        ps | grep '[h]ttpd' 2>/dev/null || true
+        netstat -ln 2>/dev/null | grep "$AIR_DROP_PORT" || true
+        [ -s "$log_file" ] && {
+            echo
+            echo "httpd log:"
+            head -8 "$log_file"
+        }
         echo
         echo "Run this in kterm and send the output:"
         echo "  ps | grep httpd; netstat -ln | grep $AIR_DROP_PORT"
@@ -170,7 +220,7 @@ airdrop_menu() {
         read -r choice
         case "$choice" in
             q|Q)
-                kill "$httpd_pid" 2>/dev/null || true
+                stop_airdrop_httpd
                 rm -rf "$web_root" "$pid_file"
                 return 0
                 ;;
