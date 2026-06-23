@@ -4,6 +4,8 @@ PORT="${KINDLEFETCH_CMD_PORT:-8088}"
 ROOT="${KINDLEFETCH_CMD_ROOT:-/mnt/us}"
 CALLBACK_HOST="${KINDLEFETCH_CALLBACK_HOST:-192.168.4.47}"
 CALLBACK_PORT="${KINDLEFETCH_CALLBACK_PORT:-8090}"
+SSH_PORT="${KINDLEFETCH_SSH_PORT:-2222}"
+KOREADER_DIR="${KINDLEFETCH_KOREADER_DIR:-/mnt/us/koreader}"
 WWW="/tmp/kcmd-www"
 PID="/tmp/kcmd.pid"
 LOG="/tmp/kcmd.log"
@@ -39,6 +41,29 @@ find_applet() {
         return 0
     fi
     return 1
+}
+
+start_koreader_ssh() {
+    [ -x "$KOREADER_DIR/dropbear" ] || return 1
+
+    mkdir -p "$KOREADER_DIR/settings/SSH" 2>/dev/null || true
+    if [ -n "$KINDLEFETCH_SSH_PUBKEY" ]; then
+        printf '%s\n' "$KINDLEFETCH_SSH_PUBKEY" > "$KOREADER_DIR/settings/SSH/authorized_keys"
+        chmod 600 "$KOREADER_DIR/settings/SSH/authorized_keys" 2>/dev/null || true
+    fi
+
+    old="$(cat /tmp/dropbear_koreader.pid 2>/dev/null)"
+    [ -n "$old" ] && kill "$old" 2>/dev/null || true
+
+    iptables -A INPUT -p tcp --dport "$SSH_PORT" -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -p tcp --sport "$SSH_PORT" -m conntrack --ctstate ESTABLISHED -j ACCEPT 2>/dev/null || true
+
+    (
+        cd "$KOREADER_DIR" 2>/dev/null || exit 1
+        ./dropbear -E -R -p "$SSH_PORT" -P /tmp/dropbear_koreader.pid -n >/tmp/kcmd-dropbear.log 2>&1
+    )
+    sleep 1
+    netstat -ln 2>/dev/null | grep "[.:]$SSH_PORT " >/dev/null 2>&1
 }
 
 decode_cmd() {
@@ -165,10 +190,21 @@ say "Kindle command server"
 say "Root: $ROOT"
 say "Port: $PORT"
 say "Reverse: $CALLBACK_HOST:$CALLBACK_PORT"
+say "SSH: $SSH_PORT"
 say
 
 old="$(cat "$PID" 2>/dev/null)"
 [ -n "$old" ] && kill "$old" 2>/dev/null || true
+
+if start_koreader_ssh; then
+    say "KOReader SSH OK. From your Mac:"
+    for ip in $(lan_ips); do say "  ssh -p $SSH_PORT root@$ip"; done
+    say
+else
+    say "KOReader SSH not available."
+    [ -s /tmp/kcmd-dropbear.log ] && { say "Dropbear log:"; cat /tmp/kcmd-dropbear.log; }
+    say
+fi
 
 if start_httpd; then
     say "HTTPD OK. Open:"
