@@ -56,7 +56,7 @@ zlib_download() {
     fi
 
     local file_size="$(curl -sI "$ddl" | awk '/Content-Length/ {printf "%.2f MB\n", $2/1048576}')"
-    local filename="$(sanitize_filename "${title}.${ext}")"
+    local filename="$(sanitize_filename "${title}.${ext}" | sed 's/__*/_/g; s/^_//; s/_$//' | cut -c1-140)"
     local filename="${filename:-book.bin}"
     
     if [ ! -w "$KINDLE_DOCUMENTS" ]; then

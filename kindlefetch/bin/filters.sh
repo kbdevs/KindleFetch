@@ -1,29 +1,93 @@
 #!/bin/sh
 
-filters_menu() {
-    CURRENT_FILTERS_FILE="$SCRIPT_DIR/tmp/current_filters"
-    CURRENT_PARAMS_FILE="$SCRIPT_DIR/tmp/current_filter_params"
+CURRENT_FILTERS_FILE="$SCRIPT_DIR/tmp/current_filters"
+CURRENT_PARAMS_FILE="$SCRIPT_DIR/tmp/current_filter_params"
 
+build_filter_params() {
+    filter_string=""
+    [ -n "$content_filter" ] && filter_string="${filter_string}&content=$content_filter"
+    [ -n "$ext_filter" ] && filter_string="${filter_string}&ext=$ext_filter"
+    [ -n "$lang_filter" ] && filter_string="${filter_string}&lang=$lang_filter"
+    [ -n "$src_filter" ] && filter_string="${filter_string}&src=$src_filter"
+    [ -n "$sort_filter" ] && filter_string="${filter_string}&sort=$sort_filter"
+    printf "%s\n" "$filter_string"
+}
+
+save_current_filters() {
+    mkdir -p "$SCRIPT_DIR/tmp" 2>/dev/null
+    {
+        echo "content_filter=\"$content_filter\""
+        echo "ext_filter=\"$ext_filter\""
+        echo "lang_filter=\"$lang_filter\""
+        echo "src_filter=\"$src_filter\""
+        echo "sort_filter=\"$sort_filter\""
+    } > "$CURRENT_FILTERS_FILE"
+
+    build_filter_params > "$CURRENT_PARAMS_FILE"
+}
+
+load_current_filters() {
+    content_filter=""
+    ext_filter=""
+    lang_filter=""
+    src_filter=""
+    sort_filter=""
+
+    if [ -f "$CURRENT_FILTERS_FILE" ]; then
+        . "$CURRENT_FILTERS_FILE" 2>/dev/null || true
+    fi
+}
+
+get_active_format_filter() {
+    load_current_filters
+    printf "%s\n" "$ext_filter"
+}
+
+clear_format_filter() {
+    load_current_filters
+    ext_filter=""
+    save_current_filters
+    PREFERRED_FORMAT_FILTER="none"
+    save_config
+}
+
+detect_preferred_book_format() {
+    search_root="${KINDLE_DOCUMENTS:-/mnt/us/documents}"
+    [ -d "$search_root" ] || search_root="/mnt/us"
+
+    find "$search_root" -type f \( \
+        -iname "*.epub" -o -iname "*.azw3" -o -iname "*.mobi" -o \
+        -iname "*.pdf" -o -iname "*.txt" -o -iname "*.fb2" -o \
+        -iname "*.djvu" -o -iname "*.cbz" -o -iname "*.cbr" \
+    \) 2>/dev/null | \
+        sed 's/.*\.//' | tr 'A-Z' 'a-z' | sort | uniq -c | sort -nr | \
+        awk 'NR == 1 {print $2}'
+}
+
+ensure_default_format_filter() {
+    mkdir -p "$SCRIPT_DIR/tmp" 2>/dev/null
+    load_current_filters
+
+    [ -n "$ext_filter" ] && return 0
+    [ "$PREFERRED_FORMAT_FILTER" = "none" ] && return 0
+
+    if [ -z "$PREFERRED_FORMAT_FILTER" ]; then
+        PREFERRED_FORMAT_FILTER="$(detect_preferred_book_format)"
+        [ -n "$PREFERRED_FORMAT_FILTER" ] && save_config
+    fi
+
+    [ -n "$PREFERRED_FORMAT_FILTER" ] || return 0
+    ext_filter="$PREFERRED_FORMAT_FILTER"
+    save_current_filters
+}
+
+filters_menu() {
     local current_tab=1
     local total_tabs=5
 
     mkdir -p "$SCRIPT_DIR/tmp" 2>/dev/null
 
-    if [ -f "$CURRENT_FILTERS_FILE" ]; then
-        . "$CURRENT_FILTERS_FILE" 2>/dev/null || {
-            content_filter=""
-            ext_filter=""
-            lang_filter=""
-            src_filter=""
-            sort_filter=""
-        }
-    else
-        content_filter=""
-        ext_filter=""
-        lang_filter=""
-        src_filter=""
-        sort_filter=""
-    fi
+    load_current_filters
 
     while true; do
         clear
@@ -147,21 +211,13 @@ filters_menu() {
                        esac ;;
                 esac ;;
             [qQ])
-                {
-                    echo "content_filter=\"$content_filter\""
-                    echo "ext_filter=\"$ext_filter\""
-                    echo "lang_filter=\"$lang_filter\""
-                    echo "src_filter=\"$src_filter\""
-                    echo "sort_filter=\"$sort_filter\""
-                } > "$CURRENT_FILTERS_FILE"
-
-                filter_string=""
-                [ -n "$content_filter" ] && filter_string="${filter_string}&content=$content_filter"
-                [ -n "$ext_filter" ] && filter_string="${filter_string}&ext=$ext_filter"
-                [ -n "$lang_filter" ] && filter_string="${filter_string}&lang=$lang_filter"
-                [ -n "$src_filter" ] && filter_string="${filter_string}&src=$src_filter"
-                [ -n "$sort_filter" ] && filter_string="${filter_string}&sort=$sort_filter"
-                echo "$filter_string" > "$CURRENT_PARAMS_FILE"
+                if [ -n "$ext_filter" ]; then
+                    PREFERRED_FORMAT_FILTER="$ext_filter"
+                else
+                    PREFERRED_FORMAT_FILTER="none"
+                fi
+                save_current_filters
+                save_config
 
                 return 0
                 ;;

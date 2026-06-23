@@ -1,13 +1,16 @@
 #!/bin/sh
 
 display_books() {
-    draw_header "Search" "Choose a result to download"
-
     local books="$1"
     local page="$2"
     local has_prev="$3"
     local has_next="$4"
     local last_page="$5"
+    local active_format="$6"
+
+    subtitle="Choose a result to download"
+    [ -n "$active_format" ] && subtitle="$subtitle | format: $active_format"
+    draw_header "Search" "$subtitle"
 
     local count
     count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l | tr -d ' ')"
@@ -23,16 +26,23 @@ display_books() {
         author="$(get_json_value "$book_info" "author")"
         format="$(get_json_value "$book_info" "format")"
         description="$(get_json_value "$book_info" "description")"
+        source_rank="$(get_json_value "$book_info" "source_rank")"
+        [ -z "$source_rank" ] || [ "$source_rank" = "null" ] && source_rank="$((count-i))"
 
         if [ "$COMPACT_OUTPUT" != true ]; then
-            printf "%2d. %s\n" "$((i+1))" "$title"
+            printf "%2d. %s\n" "$source_rank" "$title"
             [ -n "$author" ] && [ "$author" != "null" ] && echo "    by $author"
             [ -n "$format" ] && [ "$format" != "null" ] && echo "    $format"
             [ -n "$description" ] && [ "$description" != "null" ] && echo "    $description"
             echo ""
         else
-            printf "%2d. %s by %s in %s format\n" \
-                "$((i+1))" "$title" "$author" "$format"
+            if [ -n "$author" ] && [ "$author" != "null" ]; then
+                printf "%2d. %s by %s in %s format\n" \
+                    "$source_rank" "$title" "$author" "$format"
+            else
+                printf "%2d. %s in %s format\n" \
+                    "$source_rank" "$title" "$format"
+            fi
             echo ""
         fi
 
@@ -46,10 +56,11 @@ display_books() {
     echo "Page $page of $last_page"
     echo ""
 
-    [ "$has_prev" = true ] && echo -n "p: Previous page | "
-    echo -n "t[1-$last_page]: Select page | "
-    [ "$has_next" = true ] && echo -n "n: Next page | "
-    [ "$items_on_page" -gt 0 ] && echo "1-$items_on_page: Select book | q: Quit" || echo "q: Quit"
+    [ "$has_prev" = true ] && printf "p: Previous page | "
+    printf "t[1-%s]: Select page | " "$last_page"
+    [ "$has_next" = true ] && printf "n: Next page | "
+    [ -n "$active_format" ] && printf "f: Clear format filter | "
+    [ "$items_on_page" -gt 0 ] && echo "shown #: Select book | q: Quit" || echo "q: Quit"
     echo ""
 }
 
@@ -59,6 +70,7 @@ parse_lgli_books() {
         gsub(/\r/, "", value)
         gsub(/<script[^>]*>[^<]*(<[^>]*>[^<]*)*<\/script>/, "", value)
         gsub(/<[^>]*>/, "", value)
+        gsub(/ /, " ", value)
         gsub(/&amp;/, "\\&", value)
         gsub(/&#39;|&apos;/, "", value)
         gsub(/&quot;/, "\"", value)
@@ -73,9 +85,18 @@ parse_lgli_books() {
         gsub(/"/, "\\\"", value)
         return value
     }
+    function bad_title(value) {
+        cleaned = value
+        gsub(/[0-9xX;: ,.-]/, "", cleaned)
+        return cleaned == ""
+    }
     function href_text(cell, href_part, value) {
         value = cell
-        sub(".*href=\"" href_part "[^\"]*\"[^>]*>", "", value)
+        if (!match(value, "href=\"" href_part "[^\"]*\"")) {
+            return ""
+        }
+        value = substr(value, RSTART)
+        sub(/^[^>]*>/, "", value)
         sub(/<\/a>.*/, "", value)
         return clean_text(value)
     }
@@ -83,7 +104,7 @@ parse_lgli_books() {
         title = ""; author = ""; format = ""; md5 = ""; description = ""; col = 0
     }
     function emit_record() {
-        if (title != "" && md5 != "" && !seen[md5]) {
+        if (count < 25 && title != "" && md5 != "" && !seen[md5]) {
             description = language
             if (year != "") {
                 description = description " " year
@@ -100,6 +121,7 @@ parse_lgli_books() {
             print "author=" json_escape(author)
             print "format=" json_escape(format)
             print "md5=" md5
+            print "source_rank=" 25 - count
             print "title=" json_escape(title)
             print "url=" base_url "/ads.php?md5=" md5
             print "description=" json_escape(description)
@@ -130,6 +152,15 @@ parse_lgli_books() {
 
         if (col == 1 && cell ~ /href="edition.php/) {
             title = href_text(cell, "edition.php")
+            if (bad_title(title) && cell ~ /<b>/) {
+                series_title = cell
+                sub(/.*<b>/, "", series_title)
+                sub(/<\/b>.*/, "", series_title)
+                series_title = clean_text(series_title)
+                if (!bad_title(series_title)) {
+                    title = series_title
+                }
+            }
         } else if (col == 2) {
             author = clean_text(cell)
         } else if (col == 4) {
@@ -179,13 +210,85 @@ search_lgli_books() {
     return 1
 }
 
+filter_books_by_format() {
+    wanted_format="$1"
+    [ -n "$wanted_format" ] || {
+        cat
+        return 0
+    }
+
+    awk '
+    function record_value(record, key, lines, i) {
+        split(record, lines, "\n")
+        for (i in lines) {
+            if (lines[i] ~ "^" key "=") {
+                sub("^" key "=", "", lines[i])
+                return lines[i]
+            }
+        }
+        return ""
+    }
+    function trim_record(value) {
+        gsub(/^[ \t\r\n,]+|[ \t\r\n]+$/, "", value)
+        return value
+    }
+    function emit(record) {
+        if (count > 0) {
+            printf ",\n"
+        }
+        print "  {"
+        print record
+        printf "}"
+        count++
+    }
+    BEGIN {
+        RS = "\\{"
+        wanted = tolower(wanted)
+        print "["
+        count = 0
+    }
+    NR > 1 {
+        record = $0
+        sub(/\}.*/, "", record)
+        record = trim_record(record)
+        if (record != "" && tolower(record_value(record, "format")) == wanted) {
+            emit(record)
+        }
+    }
+    END {
+        print "]"
+    }' wanted="$wanted_format"
+}
+
+selection_to_download_index() {
+    choice="$1"
+    results_file="$2"
+
+    index="$(awk -v choice="$choice" '
+        BEGIN { RS="\\{"; FS="\\}"; pos=0 }
+        NR > 1 {
+            pos++
+            if ($1 ~ "(^|\n)source_rank=" choice "(\n|$)") {
+                print pos
+                exit
+            }
+        }
+    ' "$results_file")"
+    if [ -n "$index" ]; then
+        echo "$index"
+        return 0
+    fi
+
+    count="$(grep -E '"title"[[:space:]]*:|^title=' "$results_file" | wc -l | tr -d ' ')"
+    echo $((count - choice + 1))
+}
+
 search_books() {
     local query="$1"
     local page="${2:-1}"
-    local retry_mirrors="${3:-true}"
     
     if [ -z "$query" ]; then
-        echo -n "Enter search query: "
+        printf "Enter search query: "
         read -r query
         [ -z "$query" ] && {
             echo "Search query cannot be empty"
@@ -195,6 +298,8 @@ search_books() {
     
     echo "Searching for '$query' (page $page)..."
 
+    ensure_default_format_filter
+    local active_format="$(get_active_format_filter)"
     local filters=""
     if [ -f "$SCRIPT_DIR"/tmp/current_filter_params ]; then
         filters=$(cat "$SCRIPT_DIR/tmp/current_filter_params")
@@ -204,134 +309,21 @@ search_books() {
     local html_file="$TMP_DIR/kindlefetch_search.html"
     local html_content=""
     local parsed_count=0
-    local tried_urls=""
     local search_url=""
 
-    for candidate_url in "$ANNAS_URL" $ANNAS_MIRROR_URLS; do
-        [ -z "$candidate_url" ] && continue
-        case " $tried_urls " in
-            *" $candidate_url "*) continue ;;
-        esac
-        tried_urls="$tried_urls $candidate_url"
-        search_url="$candidate_url/search?page=${page}&q=${encoded_query}${filters}"
-        echo "Fetching $search_url..."
-
-        if fetch_url "$search_url" "$html_file"; then
-            html_content="$(cat "$html_file")"
-        else
-            html_content=""
+    if search_lgli_books "$query" "$page" "$encoded_query" "$html_file"; then
+        html_content="$(cat "$html_file")"
+        if [ -n "$active_format" ]; then
+            books="$(printf "%s\n" "$books" | filter_books_by_format "$active_format")"
         fi
-
-        ANNAS_URL="$candidate_url"
-        books="$(printf "%s\n" "$html_content" | awk -v base_url="$ANNAS_URL" '
-        function clean_text(value) {
-            gsub(/<script[^>]*>[^<]*(<[^>]*>[^<]*)*<\/script>/, "", value)
-            gsub(/<[^>]*>/, "", value)
-            gsub(/&amp;/, "\\&", value)
-            gsub(/&#39;|&apos;/, "", value)
-            gsub(/&quot;/, "\"", value)
-            gsub(/&nbsp;/, " ", value)
-            gsub(/&[#a-zA-Z0-9]+;/, "", value)
-            gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", value)
-            gsub(/[ \t\r\n][ \t\r\n]+/, " ", value)
-            return value
-        }
-        function json_escape(value) {
-            gsub(/\\/, "\\\\", value)
-            gsub(/"/, "\\\"", value)
-            return value
-        }
-        function emit_record() {
-            if (title != "" && md5 != "" && !seen[md5]) {
-                seen[md5] = 1
-                if (count > 0) {
-                    printf ",\n"
-                }
-                print "  {"
-                print "author=" author
-                print "format=" format
-                print "md5=" md5
-                print "title=" title
-                print "url=" base_url "/md5/" md5
-                print "description=" description
-                printf "}"
-                count++
-            }
-        }
-        function reset_record() {
-            title = ""; author = ""; md5 = ""; format = ""; description = ""
-        }
-        function attr_value(line, attr, start, value) {
-            start = index(line, attr "=\"")
-            if (!start) {
-                return ""
-            }
-            value = substr(line, start + length(attr) + 2)
-            sub(/".*/, "", value)
-            return clean_text(value)
-        }
-        BEGIN {
-            print "["
-            count = 0
-            reset_record()
-        }
-        /<div class="flex  *pt-3/ {
-            emit_record()
-            reset_record()
-        }
-        {
-            if (md5 == "" && match($0, /href="\/md5\/[a-f0-9][a-f0-9]*/)) {
-                md5 = substr($0, RSTART+11, 32)
-            }
-
-            if (title == "" && index($0, "text-violet-900") && index($0, "data-content=")) {
-                title = attr_value($0, "data-content")
-            }
-
-            if (author == "" && index($0, "text-amber-900") && index($0, "data-content=")) {
-                author = attr_value($0, "data-content")
-            }
-
-            if (format == "" && index($0, "font-mono")) {
-                lower_line = tolower(clean_text($0))
-                n = split(lower_line, parts, ".")
-                if (n > 1) {
-                    ext = parts[n]
-                    sub(/[^a-z0-9].*/, "", ext)
-                    if (ext == "epub" || ext == "pdf" || ext == "mobi" || ext == "azw3" || ext == "txt" || ext == "fb2" || ext == "djvu" || ext == "cbz" || ext == "cbr") {
-                        format = ext
-                    }
-                }
-            }
-
-            if (description == "" && index($0, "text-gray-800") && index($0, "font-semibold") && index($0, "text-sm")) {
-                description = clean_text($0)
-            }
-
-            title = json_escape(title)
-            author = json_escape(author)
-            description = json_escape(description)
-        }
-        END {
-            emit_record()
-            print "\n]"
-        }'
-        )"
         parsed_count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l | tr -d ' ')"
-        if [ "$parsed_count" != "0" ]; then
-            save_config
-            break
+        if [ "$parsed_count" = "0" ] && [ -n "$active_format" ]; then
+            echo "No $active_format results found. Clearing the format filter and retrying..."
+            clear_format_filter
+            search_books "$query" "$page"
+            return
         fi
-
-        [ "$retry_mirrors" != "true" ] && break
-    done
-
-    if [ "$parsed_count" = "0" ]; then
-        echo "Anna returned no usable results; trying LibGen..."
-        if search_lgli_books "$query" "$page" "$encoded_query" "$html_file"; then
-            html_content="$(cat "$html_file")"
-            save_config
-        fi
+        save_config
     fi
     
     local last_page="$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -t= -k2 -nr | head -1 | cut -d= -f2 | tr -d '"')"
@@ -348,8 +340,11 @@ search_books() {
     echo "$last_page" > "$TMP_DIR"/last_search_last_page
     echo "$has_next" > "$TMP_DIR"/last_search_has_next
     echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
+    echo "$active_format" > "$TMP_DIR"/last_search_format_filter
     
     echo "$books" > "$TMP_DIR"/search_results.json
+    local shown_numbers="$(echo "$books" | sed -n 's/^source_rank=//p' | tr '\n' ' ')"
+    echo "$shown_numbers" > "$TMP_DIR"/last_search_shown_numbers
 
     if [ "$parsed_count" = "0" ]; then
         echo "No results found."
@@ -370,12 +365,14 @@ search_books() {
         local last_page="$(cat "$TMP_DIR"/last_search_last_page 2>/dev/null || echo 1)"
         local has_next="$(cat "$TMP_DIR"/last_search_has_next 2>/dev/null || echo "false")"
         local has_prev="$(cat "$TMP_DIR"/last_search_has_prev 2>/dev/null || echo "false")"
+        local active_format="$(cat "$TMP_DIR"/last_search_format_filter 2>/dev/null || echo "")"
         local books="$(cat "$TMP_DIR"/search_results.json 2>/dev/null)"
+        local shown_numbers="$(cat "$TMP_DIR"/last_search_shown_numbers 2>/dev/null || echo "")"
         local count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l | tr -d ' ')"
 
-        display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
+        display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page" "$active_format"
         
-        echo -n "Enter choice: "
+        printf "Enter choice: "
         read -r choice
         
         case "$choice" in
@@ -399,6 +396,17 @@ search_books() {
                     return
                 else
                     echo "Already on last page"
+                    sleep 2
+                fi
+                ;;
+            [fF])
+                if [ -n "$active_format" ]; then
+                    echo "Clearing format filter..."
+                    clear_format_filter
+                    search_books "$query" "$current_page"
+                    return
+                else
+                    echo "No active format filter"
                     sleep 2
                 fi
                 ;;
@@ -426,8 +434,14 @@ search_books() {
                 if echo "$choice" | grep -qE '^[0-9]+$'; then
                     local items_on_page="$count"
 
-                    if [ "$choice" -ge 1 ] && [ "$choice" -le "$items_on_page" ]; then
-                        absolute_index=$(( choice - 1 ))
+                    case " $shown_numbers " in
+                        *" $choice "*) valid_choice=true ;;
+                        *) valid_choice=false ;;
+                    esac
+
+                    if [ "$valid_choice" = true ]; then
+                        download_index="$(selection_to_download_index "$choice" "$TMP_DIR/search_results.json")"
+                        absolute_index=$(( download_index - 1 ))
 
                         book_info="$(awk -v i=$absolute_index \
                             'BEGIN{RS="\\{"; FS="\\}"} NR==i+2{print $1}' \
@@ -456,14 +470,14 @@ search_books() {
                             fi
                             echo "3. Cancel download"
 
-                            echo -n "Choose source to proceed with: "
+                            printf "Choose source to proceed with: "
                             read -r source_choice
 
                             case "$source_choice" in
                                 1)
                                     if [ "$lgli_available" = true ]; then
                                         echo "Proceeding with lgli..."
-                                        if ! lgli_download "$choice"; then
+                                        if ! lgli_download "$download_index"; then
                                             echo "Download from lgli failed."
                                             sleep 2
                                         else
@@ -477,7 +491,7 @@ search_books() {
                                     if [ "$zlib_available" = true ]; then
                                         if [ "$ZLIB_AUTH" = true ]; then
                                             echo "Proceeding with zlib..."
-                                            if ! zlib_download "$choice"; then
+                                            if ! zlib_download "$download_index"; then
                                                 echo "Download from zlib failed."
                                                 sleep 2
                                             else
@@ -485,7 +499,7 @@ search_books() {
                                             fi
                                         else
                                             echo
-                                            echo -n "Do you want to sign into your zlib account? [Y/n]: "
+                                            printf "Do you want to sign into your zlib account? [Y/n]: "
                                             read -r zlib_login_choice
                                             echo
 
@@ -494,9 +508,9 @@ search_books() {
                                                 save_config
                                             else
                                                 while true; do
-                                                    echo -n "Zlib email: "
+                                                    printf "Zlib email: "
                                                     read -r zlib_email
-                                                    echo -n "Zlib password: "
+                                                    printf "Zlib password: "
                                                     stty -echo 2>/dev/null || true
                                                     read -r zlib_password
                                                     stty echo 2>/dev/null || true
@@ -507,14 +521,14 @@ search_books() {
                                                         save_config
 
                                                         printf "\n\nProceeding with zlib..."
-                                                        if ! zlib_download "$choice"; then
+                                                        if ! zlib_download "$download_index"; then
                                                             echo "Download from zlib failed."
                                                             sleep 2
                                                         else
                                                             break 2
                                                         fi
                                                     else
-                                                        echo -n "Zlib login failed. Do you want to try again? [Y/n]: "
+                                                        printf "Zlib login failed. Do you want to try again? [Y/n]: "
                                                         read -r zlib_login_retry_choice
                                                         echo
                                                         
@@ -542,7 +556,7 @@ search_books() {
 
                         pause
                     else
-                        echo "Invalid selection (must be between 1 and $items_on_page)"
+                        echo "Invalid selection (choose one of: $shown_numbers)"
                         sleep 2
                     fi
                 else

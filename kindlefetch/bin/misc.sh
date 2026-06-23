@@ -179,7 +179,7 @@ save_config() {
         echo "ZLIB_AUTH=\"$ZLIB_AUTH\""
         echo "ZLIB_USERNAME=\"$ZLIB_USERNAME\""
         echo "RESULTS_PER_PAGE=\"$RESULTS_PER_PAGE\""
-        echo "ANNAS_URL=\"$ANNAS_URL\""
+        echo "PREFERRED_FORMAT_FILTER=\"$PREFERRED_FORMAT_FILTER\""
         echo "LGLI_URL=\"$LGLI_URL\""
         echo "ZLIB_URL=\"$ZLIB_URL\""
         echo "KF_REPO_OWNER=\"$KF_REPO_OWNER\""

@@ -28,7 +28,6 @@ settings_menu() {
         echo "7. Check for updates"
         echo ""
         echo "Current mirrors:"
-        echo "   Anna's Archive - ${ANNAS_URL}"
         echo "   Library Genesis - ${LGLI_URL}"
         echo "   ZLibrary - ${ZLIB_URL}"
         echo "8. Change URLs"
@@ -123,9 +122,8 @@ settings_menu() {
             8)
                 echo ""
                 echo "Which URL do you want to change?"
-                echo "1. Anna's Archive"
-                echo "2. Library Genesis"
-                echo "3. ZLibrary"
+                echo "1. Library Genesis"
+                echo "2. ZLibrary"
                 echo ""
                 echo "q. Cancel"
                 echo ""
@@ -134,29 +132,6 @@ settings_menu() {
 
                 case "$choice" in
                     1)
-                        echo -n "Enter new URL for Anna's Archive: "
-                        read -r new_annas_url
-
-                        working_url=$(find_working_url "$new_annas_url")
-                        if [ -z "$working_url" ]; then
-                            echo "Failed to connect to ${new_annas_url}."
-                            echo -n "Are you sure you want to set this URL anyway? [y/N]: "
-                            read -r confirm
-                            if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-                                echo "URL not changed."
-                                sleep 2
-                                continue
-                            else
-                                working_url="$new_annas_url"
-                            fi
-                        fi
-
-                        ANNAS_URL="$working_url"
-                        echo "Anna's Archive URL set to $ANNAS_URL"
-                        save_config
-                        sleep 2
-                        ;;
-                    2)
                         echo -n "Enter new URL for Library Genesis: "
                         read -r new_lgli_url
 
@@ -179,7 +154,7 @@ settings_menu() {
                         save_config
                         sleep 2
                         ;;
-                    3)
+                    2)
                         echo -n "Enter new URL for ZLibrary: "
                         read -r new_zlib_url
 

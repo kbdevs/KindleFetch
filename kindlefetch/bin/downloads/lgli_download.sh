@@ -17,10 +17,16 @@ lgli_download() {
     local md5="$(get_json_value "$book_info" "md5")"
     local title="$(get_json_value "$book_info" "title")"
     local format="$(get_json_value "$book_info" "format")"
+    local safe_title_check="$(printf "%s" "$title" | tr -d '0-9xX;: ,.-')"
+    if [ -z "$title" ] || [ -z "$safe_title_check" ]; then
+        echo "Book title metadata is missing or invalid; not saving with a garbage filename." >&2
+        return 1
+    fi
     
     printf "\nDownloading: $title"
 
-    local clean_title="$(sanitize_filename "$title" | tr -d ' ')"
+    local clean_title="$(sanitize_filename "$title" | sed 's/__*/_/g; s/^_//; s/_$//' | cut -c1-120)"
+    [ -n "$clean_title" ] || clean_title="book_$md5"
 
     printf '\nDo you want to change filename? [y/N]: '
     read -r confirm
@@ -28,7 +34,7 @@ lgli_download() {
         echo -n "Enter your custom filename: "
         read -r custom_filename
         if [ -n "$custom_filename" ]; then
-            local clean_title="$(sanitize_filename "$custom_filename" | tr -d ' ')"
+            local clean_title="$(sanitize_filename "$custom_filename" | sed 's/__*/_/g; s/^_//; s/_$//' | cut -c1-120)"
         else
             echo "Invalid filename. Proceeding with original filename."
         fi

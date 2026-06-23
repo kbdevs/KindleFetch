@@ -5,7 +5,7 @@
 <a href="https://github.com/justrals/KindleFetch"><img src="https://img.shields.io/github/stars/justrals/KindleFetch" height="25px"></a>
 <a href="https://justrals.wtf/donate"><img src="https://img.shields.io/badge/Donate-f09c00" height="25px"></a>
 
-Simple CLI for downloading books from Anna's Archive directly to your Kindle without a computer.
+Simple CLI for searching LibGen and downloading books directly to your Kindle without a computer.
 
 ## Prerequisites
 **Your Kindle must be jailbroken before proceeding!**  
@@ -45,3 +45,25 @@ If it's not, follow [this guide](https://kindlemodding.org/) first.
    - You should now see a new "KindleFetch" option in KUAL
 
 3. Update from the main menu if asked
+
+## Mac CLI
+
+With KindleFetch installed and SSH running on the Kindle, you can search from your Mac and download directly onto the Kindle:
+
+```bash
+./kindlefetch-mac.sh download "win"
+```
+
+Useful commands:
+
+```bash
+./kindlefetch-mac.sh search "win"
+./kindlefetch-mac.sh update
+./kindlefetch-mac.sh ssh
+```
+
+If your Kindle IP changes:
+
+```bash
+KINDLE_HOST=192.168.4.75 ./kindlefetch-mac.sh download "win"
+```
