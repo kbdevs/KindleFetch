@@ -6,6 +6,7 @@ CALLBACK_HOST="${KINDLEFETCH_CALLBACK_HOST:-192.168.4.47}"
 CALLBACK_PORT="${KINDLEFETCH_CALLBACK_PORT:-8090}"
 SSH_PORT="${KINDLEFETCH_SSH_PORT:-2222}"
 KOREADER_DIR="${KINDLEFETCH_KOREADER_DIR:-/mnt/us/koreader}"
+DEFAULT_SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOGvQL1iwarStfdwwLrq1QHtH5+pZJ/dnwVAeyWKD5re kindlefetch-test"
 WWW="/tmp/kcmd-www"
 PID="/tmp/kcmd.pid"
 LOG="/tmp/kcmd.log"
@@ -47,8 +48,9 @@ start_koreader_ssh() {
     [ -x "$KOREADER_DIR/dropbear" ] || return 1
 
     mkdir -p "$KOREADER_DIR/settings/SSH" 2>/dev/null || true
-    if [ -n "$KINDLEFETCH_SSH_PUBKEY" ]; then
-        printf '%s\n' "$KINDLEFETCH_SSH_PUBKEY" > "$KOREADER_DIR/settings/SSH/authorized_keys"
+    ssh_pubkey="${KINDLEFETCH_SSH_PUBKEY:-$DEFAULT_SSH_PUBKEY}"
+    if [ -n "$ssh_pubkey" ]; then
+        printf '%s\n' "$ssh_pubkey" > "$KOREADER_DIR/settings/SSH/authorized_keys"
         chmod 600 "$KOREADER_DIR/settings/SSH/authorized_keys" 2>/dev/null || true
     fi
 
