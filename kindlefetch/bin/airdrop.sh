@@ -33,6 +33,21 @@ get_lan_ips() {
     '
 }
 
+fetch_local_airdrop() {
+    url="http://127.0.0.1:$AIR_DROP_PORT/"
+    tried=false
+    if command -v curl >/dev/null 2>&1; then
+        tried=true
+        curl -fsS --connect-timeout 3 --max-time 5 "$url" >/dev/null 2>&1 && return 0
+    fi
+    if command -v wget >/dev/null 2>&1; then
+        tried=true
+        wget -q -O - "$url" >/dev/null 2>&1 && return 0
+    fi
+    [ "$tried" = true ] && return 1
+    return 2
+}
+
 write_airdrop_site() {
     web_root="$1"
     cgi_dir="$web_root/cgi-bin"
@@ -118,9 +133,25 @@ airdrop_menu() {
         return 1
     }
 
-    $httpd_cmd -f -p "$AIR_DROP_PORT" -h "$web_root" &
+    $httpd_cmd -f -p "0.0.0.0:$AIR_DROP_PORT" -h "$web_root" &
     httpd_pid="$!"
     echo "$httpd_pid" > "$pid_file"
+    sleep 1
+
+    fetch_local_airdrop
+    selftest_rc="$?"
+    if [ "$selftest_rc" = "1" ]; then
+        kill "$httpd_pid" 2>/dev/null || true
+        rm -rf "$web_root" "$pid_file"
+        draw_header "AirDrop" "Server failed"
+        echo "AirDrop httpd started but did not answer locally."
+        echo "Tried: http://127.0.0.1:$AIR_DROP_PORT/"
+        echo
+        echo "Run this in kterm and send the output:"
+        echo "  ps | grep httpd; netstat -ln | grep $AIR_DROP_PORT"
+        pause
+        return 1
+    fi
 
     draw_header "AirDrop" "Command runner"
     echo "Open one of these URLs on another device on the same Wi-Fi:"
