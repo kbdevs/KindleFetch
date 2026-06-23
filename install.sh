@@ -7,7 +7,7 @@ KF_REPO_NAME="${KF_REPO_NAME:-KindleFetch}"
 KF_REPO_BRANCH="${KF_REPO_BRANCH:-main}"
 KF_REPO_SLUG="${KF_REPO_OWNER}/${KF_REPO_NAME}"
 K_SCRIPT="/tmp/k.sh"
-K_URL="https://github.com/${KF_REPO_SLUG}/raw/${KF_REPO_BRANCH}/k.sh"
+K_URL="https://raw.githubusercontent.com/${KF_REPO_SLUG}/${KF_REPO_BRANCH}/k.sh"
 
 echo "Starting Kindle command server..."
 echo "Downloading: $K_URL"

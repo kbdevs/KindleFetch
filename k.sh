@@ -2,6 +2,8 @@
 
 PORT="${KINDLEFETCH_CMD_PORT:-8088}"
 ROOT="${KINDLEFETCH_CMD_ROOT:-/mnt/us}"
+CALLBACK_HOST="${KINDLEFETCH_CALLBACK_HOST:-192.168.4.47}"
+CALLBACK_PORT="${KINDLEFETCH_CALLBACK_PORT:-8090}"
 WWW="/tmp/kcmd-www"
 PID="/tmp/kcmd.pid"
 LOG="/tmp/kcmd.log"
@@ -144,9 +146,25 @@ start_nc() {
     done
 }
 
+start_reverse() {
+    NC="$(find_applet nc)" || return 1
+    say "Trying reverse command shell:"
+    say "  Kindle -> $CALLBACK_HOST:$CALLBACK_PORT"
+    say "Leave this open."
+    fifo="/tmp/kcmd-rev.$$"
+    rm -f "$fifo"
+    mkfifo "$fifo" || return 1
+    cd "$ROOT" 2>/dev/null || cd /
+    /bin/sh -i < "$fifo" 2>&1 | $NC "$CALLBACK_HOST" "$CALLBACK_PORT" > "$fifo"
+    rc=$?
+    rm -f "$fifo"
+    return "$rc"
+}
+
 say "Kindle command server"
 say "Root: $ROOT"
 say "Port: $PORT"
+say "Reverse: $CALLBACK_HOST:$CALLBACK_PORT"
 say
 
 old="$(cat "$PID" 2>/dev/null)"
@@ -172,6 +190,8 @@ ps | grep '[h]ttpd' 2>/dev/null || true
 say "netstat:"
 netstat -ln 2>/dev/null | grep "$PORT" || true
 [ -s "$LOG" ] && { say "log:"; cat "$LOG"; }
+say
+start_reverse || true
 say
 say "Trying netcat fallback. Open:"
 for ip in $(lan_ips); do say "http://$ip:$PORT/"; done
