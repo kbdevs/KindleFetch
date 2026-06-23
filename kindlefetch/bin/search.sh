@@ -10,7 +10,7 @@ display_books() {
     local last_page="$5"
 
     local count
-    count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l)"
+    count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l | tr -d ' ')"
 
     local start=0
     local end=$((count - 1))
@@ -92,7 +92,7 @@ search_books() {
     echo "$has_next" > "$TMP_DIR"/last_search_has_next
     echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
     
-    local books="$(printf "%s\n" "$html_content" | sed 's/<div class="flex  *pt-3/<KF_RECORD/g' | awk -v base_url="$ANNAS_URL" '
+    local books="$(printf "%s\n" "$html_content" | awk -v base_url="$ANNAS_URL" '
         function clean_text(value) {
             gsub(/<script[^>]*>[^<]*(<[^>]*>[^<]*)*<\/script>/, "", value)
             gsub(/<[^>]*>/, "", value)
@@ -110,76 +110,7 @@ search_books() {
             gsub(/"/, "\\\"", value)
             return value
         }
-        BEGIN {
-            RS = "<KF_RECORD"
-            q = sprintf("%c", 34)
-            print "["
-            count = 0
-        }
-        NR > 1 {
-            title = ""; author = ""; md5 = ""; format = ""; description = ""
-        
-            # md5
-            if (match($0, /href="\/md5\/[a-f0-9][a-f0-9]*/)) {
-                md5 = substr($0, RSTART+11, 32)
-            }
-        
-            # title: prefer the visible result link, fall back to cover metadata.
-            if (match($0, /<a href="\/md5\/[a-f0-9][a-f0-9]*"[^>]*js-vim-focus[^>]*>[^<]+<\/a>/)) {
-                title = clean_text(substr($0, RSTART, RLENGTH))
-            } else if (match($0, /<div class="font-bold text-violet-900 line-clamp-\[5\]" data-content="[^"]+"/)) {
-                block = substr($0, RSTART, RLENGTH)
-                if (match(block, /data-content="[^"]+"/)) {
-                    title = substr(block, RSTART+14, RLENGTH-15)
-                    title = clean_text(title)
-                }
-            }
-        
-            # author: first visible author search link, fall back to cover metadata.
-            if (match($0, /<a href="\/search\?q=[^"]+"[^>]*><span[^>]*><\/span>[^<]+<\/a>/)) {
-                author = clean_text(substr($0, RSTART, RLENGTH))
-            } else if ($0 ~ /<div[^>]*class="[^"]*font-bold[^"]*text-amber-900[^"]*line-clamp-\[2\][^"]*"/) {
-                if (match($0, /<div[^>]*class="[^"]*font-bold[^"]*text-amber-900[^"]*line-clamp-\[2\][^"]*" data-content="[^"]+"/)) {
-                    block = substr($0, RSTART, RLENGTH)
-                    if (match(block, /data-content="[^"]+"/)) {
-                        author = substr(block, RSTART+14, RLENGTH-15)
-                        author = clean_text(author)
-                    }
-                }
-            }
-        
-            # format
-            if (match($0, /font-mono">[^<]+\.(epub|pdf|mobi|azw3|txt|fb2|djvu|cbz|cbr)/)) {
-                line = substr($0, RSTART, RLENGTH)
-                if (match(line, /\.(epub|pdf|mobi|azw3|txt|fb2|djvu|cbz|cbr)/)) {
-                    format = substr(line, RSTART+1, RLENGTH-1)
-                }
-            } else if (match($0, /<div class="text-gray-800[^>]*>[^<]+/)) {
-                line = substr($0, RSTART, RLENGTH)
-                if (match(line, />[^<]+/)) {
-                    content = substr(line, RSTART+1, RLENGTH-1)
-                    n = split(content, parts, " · ")
-                    if (n >= 2) {
-                        format = parts[2]
-                    }
-                }
-            }
-            
-            # description
-            if (match($0, /<div[^>]*class="[^"]*text-gray-800[^"]*font-semibold[^"]*text-sm[^"]*leading-\[1\.2\][^"]*mt-2[^"]*"[^>]*>.*?<\/div>/)) {
-                line = substr($0, RSTART, RLENGTH)
-
-                description = clean_text(line)
-            }
-        
-            # emoji replacements
-            gsub(/🚀/, "Partner Server", description)
-            gsub(/📗|📘|📕|📰|💬|📝|🤨|🎶|✅/, "", description)
-        
-            title = json_escape(title)
-            author = json_escape(author)
-            description = json_escape(description)
-        
+        function emit_record() {
             if (title != "" && md5 != "" && !seen[md5]) {
                 seen[md5] = 1
                 if (count > 0) {
@@ -196,7 +127,62 @@ search_books() {
                 count++
             }
         }
+        function reset_record() {
+            title = ""; author = ""; md5 = ""; format = ""; description = ""
+        }
+        function attr_value(line, attr, start, value) {
+            start = index(line, attr "=\"")
+            if (!start) {
+                return ""
+            }
+            value = substr(line, start + length(attr) + 2)
+            sub(/".*/, "", value)
+            return clean_text(value)
+        }
+        BEGIN {
+            print "["
+            count = 0
+            reset_record()
+        }
+        /<div class="flex  *pt-3/ {
+            emit_record()
+            reset_record()
+        }
+        {
+            if (md5 == "" && match($0, /href="\/md5\/[a-f0-9][a-f0-9]*/)) {
+                md5 = substr($0, RSTART+11, 32)
+            }
+
+            if (title == "" && index($0, "text-violet-900") && index($0, "data-content=")) {
+                title = attr_value($0, "data-content")
+            }
+
+            if (author == "" && index($0, "text-amber-900") && index($0, "data-content=")) {
+                author = attr_value($0, "data-content")
+            }
+
+            if (format == "" && index($0, "font-mono")) {
+                lower_line = tolower(clean_text($0))
+                n = split(lower_line, parts, ".")
+                if (n > 1) {
+                    ext = parts[n]
+                    sub(/[^a-z0-9].*/, "", ext)
+                    if (ext == "epub" || ext == "pdf" || ext == "mobi" || ext == "azw3" || ext == "txt" || ext == "fb2" || ext == "djvu" || ext == "cbz" || ext == "cbr") {
+                        format = ext
+                    }
+                }
+            }
+
+            if (description == "" && index($0, "text-gray-800") && index($0, "font-semibold") && index($0, "text-sm")) {
+                description = clean_text($0)
+            }
+
+            title = json_escape(title)
+            author = json_escape(author)
+            description = json_escape(description)
+        }
         END {
+            emit_record()
             print "\n]"
         }'
     )"
@@ -210,7 +196,7 @@ search_books() {
         local has_next="$(cat "$TMP_DIR"/last_search_has_next 2>/dev/null || echo "false")"
         local has_prev="$(cat "$TMP_DIR"/last_search_has_prev 2>/dev/null || echo "false")"
         local books="$(cat "$TMP_DIR"/search_results.json 2>/dev/null)"
-        local count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l)"
+        local count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l | tr -d ' ')"
 
         display_books "$books" "$current_page" "$has_prev" "$has_next" "$last_page"
         
