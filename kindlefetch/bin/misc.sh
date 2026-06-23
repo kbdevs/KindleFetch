@@ -109,7 +109,35 @@ cleanup() {
     rm -f "$TMP_DIR"/kindle_books.list \
           "$TMP_DIR"/kindle_folders.list \
           "$TMP_DIR"/search_results.json \
-          "$TMP_DIR"/last_search_*
+          "$TMP_DIR"/last_search_* \
+          "$TMP_DIR"/kindlefetch_fetch_error
+}
+
+fetch_url() {
+    url="$1"
+    output_file="$2"
+
+    : > "$TMP_DIR"/kindlefetch_fetch_error 2>/dev/null || true
+
+    if command -v curl >/dev/null 2>&1; then
+        if curl -L -s -A "Mozilla/5.0" --connect-timeout 15 --max-time 45 -o "$output_file" "$url" 2>"$TMP_DIR"/kindlefetch_fetch_error; then
+            [ -s "$output_file" ] && return 0
+        fi
+        if curl -k -L -s -A "Mozilla/5.0" --connect-timeout 15 --max-time 45 -o "$output_file" "$url" 2>"$TMP_DIR"/kindlefetch_fetch_error; then
+            [ -s "$output_file" ] && return 0
+        fi
+    fi
+
+    if command -v wget >/dev/null 2>&1; then
+        if wget -q --no-check-certificate -O "$output_file" "$url" 2>"$TMP_DIR"/kindlefetch_fetch_error; then
+            [ -s "$output_file" ] && return 0
+        fi
+        if wget -q -O "$output_file" "$url" 2>"$TMP_DIR"/kindlefetch_fetch_error; then
+            [ -s "$output_file" ] && return 0
+        fi
+    fi
+
+    return 1
 }
 
 get_version() {

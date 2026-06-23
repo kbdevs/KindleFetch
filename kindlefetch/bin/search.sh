@@ -56,6 +56,7 @@ display_books() {
 search_books() {
     local query="$1"
     local page="${2:-1}"
+    local retry_mirrors="${3:-true}"
     
     if [ -z "$query" ]; then
         echo -n "Enter search query: "
@@ -74,25 +75,29 @@ search_books() {
     fi
     
     local encoded_query=$(echo "$query" | sed 's/ /+/g')
-    local search_url="$ANNAS_URL/search?page=${page}&q=${encoded_query}${filters}"
-    local html_content="$(curl -L -s -A "Mozilla/5.0" "$search_url") || html_content=$(curl -L -s -A "Mozilla/5.0" -x "$PROXY_URL" "$search_url")"
-    
-    local last_page="$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -t= -k2 -nr | head -1 | cut -d= -f2 | tr -d '"')"
-    [ -z "$last_page" ] && last_page=1
-    
-    local has_prev=false
-    [ "$page" -gt 1 ] && has_prev=true
-    
-    local has_next=false
-    [ "$page" -lt "$last_page" ] && has_next=true
+    local html_file="$TMP_DIR/kindlefetch_search.html"
+    local html_content=""
+    local parsed_count=0
+    local tried_urls=""
+    local search_url=""
 
-    echo "$query" > "$TMP_DIR"/last_search_query
-    echo "$page" > "$TMP_DIR"/last_search_page
-    echo "$last_page" > "$TMP_DIR"/last_search_last_page
-    echo "$has_next" > "$TMP_DIR"/last_search_has_next
-    echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
-    
-    local books="$(printf "%s\n" "$html_content" | awk -v base_url="$ANNAS_URL" '
+    for candidate_url in "$ANNAS_URL" $ANNAS_MIRROR_URLS; do
+        [ -z "$candidate_url" ] && continue
+        case " $tried_urls " in
+            *" $candidate_url "*) continue ;;
+        esac
+        tried_urls="$tried_urls $candidate_url"
+        search_url="$candidate_url/search?page=${page}&q=${encoded_query}${filters}"
+        echo "Fetching $search_url..."
+
+        if fetch_url "$search_url" "$html_file"; then
+            html_content="$(cat "$html_file")"
+        else
+            html_content=""
+        fi
+
+        ANNAS_URL="$candidate_url"
+        books="$(printf "%s\n" "$html_content" | awk -v base_url="$ANNAS_URL" '
         function clean_text(value) {
             gsub(/<script[^>]*>[^<]*(<[^>]*>[^<]*)*<\/script>/, "", value)
             gsub(/<[^>]*>/, "", value)
@@ -185,9 +190,45 @@ search_books() {
             emit_record()
             print "\n]"
         }'
-    )"
+        )"
+        parsed_count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l | tr -d ' ')"
+        if [ "$parsed_count" != "0" ]; then
+            save_config
+            break
+        fi
+
+        [ "$retry_mirrors" != "true" ] && break
+    done
+    
+    local last_page="$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -t= -k2 -nr | head -1 | cut -d= -f2 | tr -d '"')"
+    [ -z "$last_page" ] && last_page=1
+    
+    local has_prev=false
+    [ "$page" -gt 1 ] && has_prev=true
+    
+    local has_next=false
+    [ "$page" -lt "$last_page" ] && has_next=true
+
+    echo "$query" > "$TMP_DIR"/last_search_query
+    echo "$page" > "$TMP_DIR"/last_search_page
+    echo "$last_page" > "$TMP_DIR"/last_search_last_page
+    echo "$has_next" > "$TMP_DIR"/last_search_has_next
+    echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
     
     echo "$books" > "$TMP_DIR"/search_results.json
+
+    if [ "$parsed_count" = "0" ]; then
+        echo "No results found."
+        echo "Last URL: $search_url"
+        echo "Downloaded bytes: $(wc -c < "$html_file" 2>/dev/null | tr -d ' ')"
+        [ -s "$TMP_DIR"/kindlefetch_fetch_error ] && {
+            echo "Fetch error:"
+            head -3 "$TMP_DIR"/kindlefetch_fetch_error
+        }
+        echo "Saved response to $html_file"
+        pause
+        return 1
+    fi
 
     while true; do
         local query="$(cat "$TMP_DIR"/last_search_query 2>/dev/null)"
