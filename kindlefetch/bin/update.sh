@@ -4,7 +4,7 @@ update() {
 	if [ "$UPDATE_AVAILABLE" = true ]; then
         if yes_no "Install update from ${KF_REPO_SLUG}/${KF_REPO_BRANCH}?" "yes"; then
             echo "Installing update..."
-            if curl -fsSL "${KF_RAW_BASE}/install.sh" | sh; then
+            if curl -fsSL "${KF_RAW_BASE}/install-full.sh" | sh; then
                 echo "Update installed successfully!"
                 UPDATE_AVAILABLE=false
                 VERSION=$(load_version)

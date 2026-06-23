@@ -16,7 +16,7 @@ settings_menu() {
         echo ""
         echo "Current configuration:"
         echo "1. Documents directory: $KINDLE_DOCUMENTS"
-        if [[ "$ZLIB_AUTH" == "true" ]]; then
+        if [ "$ZLIB_AUTH" = "true" ]; then
             echo "2. Re-log into zlib account. Currently logged-in as $ZLIB_USERNAME"
         else
             echo "2. Sign into zlib account"

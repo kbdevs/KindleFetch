@@ -497,7 +497,9 @@ search_books() {
                                                     echo -n "Zlib email: "
                                                     read -r zlib_email
                                                     echo -n "Zlib password: "
-                                                    read -s -r zlib_password
+                                                    stty -echo 2>/dev/null || true
+                                                    read -r zlib_password
+                                                    stty echo 2>/dev/null || true
                                                     echo
 
                                                     if zlib_login "$zlib_email" "$zlib_password"; then
