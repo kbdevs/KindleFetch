@@ -57,7 +57,7 @@ main_menu() {
     while true; do
         draw_header "Main Menu" "$(load_version) | https://github.com/${KF_REPO_SLUG}"
         if $UPDATE_AVAILABLE; then
-            echo "[!] Update available. Use option 6 to install it."
+            echo "[!] Update available. Use option 7 to install it."
             echo
         fi
         echo "1. Search and download"
@@ -65,9 +65,10 @@ main_menu() {
         echo "3. My books"
         echo "4. AirDrop"
         echo "5. Settings"
+        echo "6. Start SSH"
         if $UPDATE_AVAILABLE; then
             echo
-            echo "6. Install update"
+            echo "7. Install update"
         fi
         echo
         echo "q. Exit"
@@ -91,11 +92,14 @@ main_menu() {
             5)
                 settings_menu
                 ;;
+            6)
+                ssh_menu
+                ;;
             [qQ])
                 cleanup
                 exit 0
                 ;;
-            6)  
+            7)
                 if $UPDATE_AVAILABLE; then
                     update
                 fi

@@ -29,7 +29,7 @@ If it's not, follow [this guide](https://kindlemodding.org/) first.
 
 2. **Run the installation command** in kterm:
    ```bash
-   curl -L https://github.com/kbdevs/KindleFetch/raw/main/install-full.sh | sh
+   curl -L https://github.com/kbdevs/KindleFetch/raw/main/install.sh | sh
    ```
 
 3. **Complete the setup**:

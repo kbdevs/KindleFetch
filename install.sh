@@ -6,8 +6,8 @@ KF_REPO_OWNER="${KF_REPO_OWNER:-kbdevs}"
 KF_REPO_NAME="${KF_REPO_NAME:-KindleFetch}"
 KF_REPO_BRANCH="${KF_REPO_BRANCH:-main}"
 KF_REPO_SLUG="${KF_REPO_OWNER}/${KF_REPO_NAME}"
-K_SCRIPT="/tmp/k.sh"
 KF_REPO_REF="${KF_REPO_REF:-}"
+INSTALL_SCRIPT="/tmp/kindlefetch-install-full.sh"
 
 if [ -z "$KF_REPO_REF" ]; then
     if command -v curl >/dev/null 2>&1; then
@@ -16,19 +16,19 @@ if [ -z "$KF_REPO_REF" ]; then
 fi
 [ -z "$KF_REPO_REF" ] && KF_REPO_REF="$KF_REPO_BRANCH"
 
-K_URL="https://raw.githubusercontent.com/${KF_REPO_SLUG}/${KF_REPO_REF}/k.sh"
+INSTALL_URL="https://raw.githubusercontent.com/${KF_REPO_SLUG}/${KF_REPO_REF}/install-full.sh"
 
-echo "Starting Kindle command server..."
-echo "Downloading: $K_URL"
+echo "Installing KindleFetch from ${KF_REPO_SLUG}/${KF_REPO_REF}..."
+echo "Downloading: $INSTALL_URL"
 
 if command -v curl >/dev/null 2>&1; then
-    curl -fsSL -o "$K_SCRIPT" "$K_URL"
+    curl -fsSL -o "$INSTALL_SCRIPT" "$INSTALL_URL"
 elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$K_SCRIPT" "$K_URL"
+    wget -q -O "$INSTALL_SCRIPT" "$INSTALL_URL"
 else
-    echo "Need curl or wget to download k.sh."
+    echo "Need curl or wget to download KindleFetch."
     exit 1
 fi
 
-chmod +x "$K_SCRIPT" 2>/dev/null || true
-sh "$K_SCRIPT"
+chmod +x "$INSTALL_SCRIPT" 2>/dev/null || true
+sh "$INSTALL_SCRIPT"

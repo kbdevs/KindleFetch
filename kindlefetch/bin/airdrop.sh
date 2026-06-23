@@ -92,6 +92,42 @@ stop_airdrop_ssh() {
     close_ssh_firewall
 }
 
+print_ssh_commands() {
+    echo "From your Mac:"
+    for ip in $(get_lan_ips); do
+        echo "  ssh -p $AIR_DROP_SSH_PORT root@$ip"
+        echo "  scp -P $AIR_DROP_SSH_PORT file.epub root@$ip:/mnt/us/documents/"
+    done
+}
+
+ssh_menu() {
+    if ! start_airdrop_ssh; then
+        draw_header "SSH" "Failed"
+        echo "Could not start KOReader Dropbear SSH."
+        [ -s /tmp/kindlefetch-airdrop-ssh.log ] && {
+            echo
+            echo "Dropbear log:"
+            head -8 /tmp/kindlefetch-airdrop-ssh.log
+        }
+        pause
+        return 1
+    fi
+
+    draw_header "SSH" "Running"
+    echo "SSH is running on port $AIR_DROP_SSH_PORT."
+    echo
+    print_ssh_commands
+    echo
+    if [ ! -s "$KOREADER_DIR/settings/SSH/authorized_keys" ]; then
+        echo "No SSH public key is installed yet."
+        echo "Add one to:"
+        echo "  $KOREADER_DIR/settings/SSH/authorized_keys"
+        echo
+    fi
+    echo "SSH will keep running after you leave this screen."
+    pause
+}
+
 airdrop_ssh_menu() {
     if ! start_airdrop_ssh; then
         draw_header "AirDrop" "SSH failed"
@@ -108,11 +144,7 @@ airdrop_ssh_menu() {
     draw_header "AirDrop" "SSH/SCP"
     echo "AirDrop is running through KOReader SSH."
     echo
-    echo "From your Mac:"
-    for ip in $(get_lan_ips); do
-        echo "  ssh -p $AIR_DROP_SSH_PORT root@$ip"
-        echo "  scp -P $AIR_DROP_SSH_PORT file.epub root@$ip:/mnt/us/documents/"
-    done
+    print_ssh_commands
     echo
     if [ ! -s "$KOREADER_DIR/settings/SSH/authorized_keys" ]; then
         echo "No SSH public key is installed yet."
