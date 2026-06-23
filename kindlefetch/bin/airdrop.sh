@@ -65,6 +65,10 @@ start_airdrop_ssh() {
     key_dir="$KOREADER_DIR/settings/SSH"
     mkdir -p "$key_dir" 2>/dev/null || true
 
+    if netstat -ln 2>/dev/null | grep "[.:]$AIR_DROP_SSH_PORT " >/dev/null 2>&1; then
+        return 0
+    fi
+
     if [ -f "$pid_file" ]; then
         old_pid="$(cat "$pid_file" 2>/dev/null)"
         [ -n "$old_pid" ] && kill "$old_pid" 2>/dev/null || true

@@ -43,7 +43,7 @@ grep -q 'get.php?md5=' /tmp/kindlefetch-e2e-download-link.txt
 echo "DOWNLOAD_LINK_OK"
 
 echo "== local books dummy =="
-ssh_kindle "set -e; mkdir -p /mnt/us/books/kindlefetch-test-dir; printf dummy > /mnt/us/books/kindlefetch-test-dir/kindlefetch-test-book.epub; cd $REMOTE_BIN && TMP_DIR=/tmp SCRIPT_DIR=\$PWD BASE_DIR=/mnt/us CONFIG_FILE=\$PWD/kindlefetch_config LINK_CONFIG_FILE=\$PWD/link_config VERSION_FILE=\$PWD/.version ZLIB_COOKIES_FILE=\$PWD/zlib_cookies.txt . ./misc.sh; . ./local_books.sh; KINDLE_DOCUMENTS=/mnt/us/books; printf q\\\\n | list_local_books >/tmp/kf_books_out.txt; grep -q kindlefetch-test-dir /tmp/kf_books_out.txt; rm -rf /mnt/us/books/kindlefetch-test-dir; test ! -e /mnt/us/books/kindlefetch-test-dir"
+ssh_kindle "rm -rf /mnt/us/books/kindlefetch-test-dir; mkdir -p /mnt/us/books/kindlefetch-test-dir || exit 1; printf dummy > /mnt/us/books/kindlefetch-test-dir/kindlefetch-test-book.epub || exit 1; cd $REMOTE_BIN || exit 1; TMP_DIR=/tmp SCRIPT_DIR=\$PWD BASE_DIR=/mnt/us CONFIG_FILE=\$PWD/kindlefetch_config LINK_CONFIG_FILE=\$PWD/link_config VERSION_FILE=\$PWD/.version ZLIB_COOKIES_FILE=\$PWD/zlib_cookies.txt . ./misc.sh; . ./local_books.sh; KINDLE_DOCUMENTS=/mnt/us/books; printf q\\\\n | list_local_books >/tmp/kf_books_out.txt; if ! grep -q kindlefetch-test-dir /tmp/kf_books_out.txt; then cat /tmp/kf_books_out.txt; rm -rf /mnt/us/books/kindlefetch-test-dir; exit 1; fi; rm -rf /mnt/us/books/kindlefetch-test-dir; test ! -e /mnt/us/books/kindlefetch-test-dir"
 echo "LOCAL_BOOKS_OK"
 
 echo "== airdrop ssh primitives =="
