@@ -2,6 +2,8 @@
 
 BASE_DIR="${BASE_DIR:-/mnt/us}"
 AIR_DROP_PORT="${KINDLEFETCH_AIRDROP_PORT:-8088}"
+AIR_DROP_SSH_PORT="${KINDLEFETCH_AIRDROP_SSH_PORT:-2222}"
+KOREADER_DIR="${KINDLEFETCH_KOREADER_DIR:-/mnt/us/koreader}"
 
 find_httpd() {
     if command -v httpd >/dev/null 2>&1; then
@@ -19,6 +21,18 @@ find_httpd() {
     return 1
 }
 
+find_dropbear() {
+    if [ -x "$KOREADER_DIR/dropbear" ]; then
+        echo "$KOREADER_DIR/dropbear"
+        return 0
+    fi
+    if command -v dropbear >/dev/null 2>&1; then
+        command -v dropbear
+        return 0
+    fi
+    return 1
+}
+
 get_lan_ips() {
     {
         ip addr 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1
@@ -31,6 +45,89 @@ get_lan_ips() {
         $0 !~ /\.255$/ &&
         !seen[$0]++ { print }
     '
+}
+
+open_ssh_firewall() {
+    iptables -A INPUT -p tcp --dport "$AIR_DROP_SSH_PORT" -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -p tcp --sport "$AIR_DROP_SSH_PORT" -m conntrack --ctstate ESTABLISHED -j ACCEPT 2>/dev/null || true
+}
+
+close_ssh_firewall() {
+    iptables -D INPUT -p tcp --dport "$AIR_DROP_SSH_PORT" -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT 2>/dev/null || true
+    iptables -D OUTPUT -p tcp --sport "$AIR_DROP_SSH_PORT" -m conntrack --ctstate ESTABLISHED -j ACCEPT 2>/dev/null || true
+}
+
+start_airdrop_ssh() {
+    dropbear_cmd="$(find_dropbear)"
+    [ -z "$dropbear_cmd" ] && return 1
+
+    pid_file="/tmp/dropbear_koreader.pid"
+    key_dir="$KOREADER_DIR/settings/SSH"
+    mkdir -p "$key_dir" 2>/dev/null || true
+
+    if [ -f "$pid_file" ]; then
+        old_pid="$(cat "$pid_file" 2>/dev/null)"
+        [ -n "$old_pid" ] && kill "$old_pid" 2>/dev/null || true
+    fi
+
+    open_ssh_firewall
+    (
+        cd "$KOREADER_DIR" 2>/dev/null || cd /mnt/us
+        "$dropbear_cmd" -E -R -p "$AIR_DROP_SSH_PORT" -P "$pid_file" -n >/tmp/kindlefetch-airdrop-ssh.log 2>&1
+    )
+    sleep 1
+
+    netstat -ln 2>/dev/null | grep "[.:]$AIR_DROP_SSH_PORT " >/dev/null 2>&1
+}
+
+stop_airdrop_ssh() {
+    pid_file="/tmp/dropbear_koreader.pid"
+    old_pid="$(cat "$pid_file" 2>/dev/null)"
+    [ -n "$old_pid" ] && kill "$old_pid" 2>/dev/null || true
+    rm -f "$pid_file"
+    close_ssh_firewall
+}
+
+airdrop_ssh_menu() {
+    if ! start_airdrop_ssh; then
+        draw_header "AirDrop" "SSH failed"
+        echo "Could not start KOReader Dropbear SSH."
+        [ -s /tmp/kindlefetch-airdrop-ssh.log ] && {
+            echo
+            echo "Dropbear log:"
+            head -8 /tmp/kindlefetch-airdrop-ssh.log
+        }
+        pause
+        return 1
+    fi
+
+    draw_header "AirDrop" "SSH/SCP"
+    echo "AirDrop is running through KOReader SSH."
+    echo
+    echo "From your Mac:"
+    for ip in $(get_lan_ips); do
+        echo "  ssh -p $AIR_DROP_SSH_PORT root@$ip"
+        echo "  scp -P $AIR_DROP_SSH_PORT file.epub root@$ip:/mnt/us/documents/"
+    done
+    echo
+    if [ ! -s "$KOREADER_DIR/settings/SSH/authorized_keys" ]; then
+        echo "No SSH public key is installed yet."
+        echo "Add one to:"
+        echo "  $KOREADER_DIR/settings/SSH/authorized_keys"
+        echo
+    fi
+    echo "Use SSH/SCP/SFTP to upload, delete, move, and create files."
+    echo "Press q then Enter to stop AirDrop SSH."
+
+    while true; do
+        read -r choice
+        case "$choice" in
+            q|Q)
+                stop_airdrop_ssh
+                return 0
+                ;;
+        esac
+    done
 }
 
 fetch_local_airdrop() {
@@ -155,6 +252,11 @@ EOF
 }
 
 airdrop_menu() {
+    if [ -x "$KOREADER_DIR/dropbear" ]; then
+        airdrop_ssh_menu
+        return $?
+    fi
+
     httpd_cmd="$(find_httpd)"
     if [ -z "$httpd_cmd" ]; then
         draw_header "AirDrop" "Unavailable"

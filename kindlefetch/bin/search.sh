@@ -53,6 +53,132 @@ display_books() {
     echo ""
 }
 
+parse_lgli_books() {
+    awk -v base_url="$LGLI_URL" '
+    function clean_text(value) {
+        gsub(/\r/, "", value)
+        gsub(/<script[^>]*>[^<]*(<[^>]*>[^<]*)*<\/script>/, "", value)
+        gsub(/<[^>]*>/, "", value)
+        gsub(/&amp;/, "\\&", value)
+        gsub(/&#39;|&apos;/, "", value)
+        gsub(/&quot;/, "\"", value)
+        gsub(/&nbsp;/, " ", value)
+        gsub(/&[#a-zA-Z0-9]+;/, "", value)
+        gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", value)
+        gsub(/[ \t\r\n][ \t\r\n]+/, " ", value)
+        return value
+    }
+    function json_escape(value) {
+        gsub(/\\/, "\\\\", value)
+        gsub(/"/, "\\\"", value)
+        return value
+    }
+    function href_text(cell, href_part, value) {
+        value = cell
+        sub(".*href=\"" href_part "[^\"]*\"[^>]*>", "", value)
+        sub(/<\/a>.*/, "", value)
+        return clean_text(value)
+    }
+    function reset_record() {
+        title = ""; author = ""; format = ""; md5 = ""; description = ""; col = 0
+    }
+    function emit_record() {
+        if (title != "" && md5 != "" && !seen[md5]) {
+            description = language
+            if (year != "") {
+                description = description " " year
+            }
+            if (size != "") {
+                description = description " " size
+            }
+            gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", description)
+            seen[md5] = 1
+            if (count > 0) {
+                printf ",\n"
+            }
+            print "  {"
+            print "author=" json_escape(author)
+            print "format=" json_escape(format)
+            print "md5=" md5
+            print "title=" json_escape(title)
+            print "url=" base_url "/ads.php?md5=" md5
+            print "description=" json_escape(description)
+            printf "}"
+            count++
+        }
+    }
+    BEGIN {
+        print "["
+        count = 0
+        inrow = 0
+        reset_record()
+    }
+    /<\/tr>/ && inrow {
+        emit_record()
+        inrow = 0
+    }
+    /<tr>/ {
+        inrow = 1
+        reset_record()
+    }
+    inrow && /<td/ {
+        col++
+        cell = $0
+        while (cell !~ /<\/td>/ && getline more > 0) {
+            cell = cell "\n" more
+        }
+
+        if (col == 1 && cell ~ /href="edition.php/) {
+            title = href_text(cell, "edition.php")
+        } else if (col == 2) {
+            author = clean_text(cell)
+        } else if (col == 4) {
+            year = clean_text(cell)
+        } else if (col == 5) {
+            language = clean_text(cell)
+        } else if (col == 7) {
+            size = clean_text(cell)
+        } else if (col == 8) {
+            format = tolower(clean_text(cell))
+            sub(/[^a-z0-9].*/, "", format)
+        }
+
+        if (md5 == "" && match(cell, /ads\.php\?md5=[a-f0-9][a-f0-9]*/)) {
+            md5 = substr(cell, RSTART + 12, 32)
+        }
+
+    }
+    END {
+        if (inrow) {
+            emit_record()
+        }
+        print "\n]"
+    }'
+}
+
+search_lgli_books() {
+    query="$1"
+    page="$2"
+    encoded_query="$3"
+    html_file="$4"
+
+    [ -z "$LGLI_URL" ] && return 1
+
+    search_url="$LGLI_URL/index.php?req=$encoded_query&columns%5B%5D=t&columns%5B%5D=a&columns%5B%5D=s&columns%5B%5D=p&columns%5B%5D=y&columns%5B%5D=i&columns%5B%5D=ser&columns%5B%5D=md5&objects%5B%5D=f&topics%5B%5D=l&res=25&filesuns=all"
+    if [ "$page" -gt 1 ]; then
+        search_url="$search_url&page=$page"
+    fi
+    echo "Fetching $search_url..."
+
+    if fetch_url "$search_url" "$html_file"; then
+        books="$(parse_lgli_books < "$html_file")"
+        parsed_count="$(echo "$books" | grep -E '"title"[[:space:]]*:|^title=' | wc -l | tr -d ' ')"
+        [ "$parsed_count" != "0" ] && return 0
+    fi
+
+    return 1
+}
+
 search_books() {
     local query="$1"
     local page="${2:-1}"
@@ -199,6 +325,14 @@ search_books() {
 
         [ "$retry_mirrors" != "true" ] && break
     done
+
+    if [ "$parsed_count" = "0" ]; then
+        echo "Anna returned no usable results; trying LibGen..."
+        if search_lgli_books "$query" "$page" "$encoded_query" "$html_file"; then
+            html_content="$(cat "$html_file")"
+            save_config
+        fi
+    fi
     
     local last_page="$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -t= -k2 -nr | head -1 | cut -d= -f2 | tr -d '"')"
     [ -z "$last_page" ] && last_page=1
