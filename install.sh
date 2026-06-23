@@ -68,7 +68,10 @@ rm -rf "$INSTALL_DIR"
 echo "Installing KindleFetch..."
 mkdir -p "$INSTALL_DIR"
 mv -f "$EXTRACTED_DIR/kindlefetch"/* "$INSTALL_DIR/"
-chmod +x "$INSTALL_DIR/run.sh" "$INSTALL_DIR"/bin/*.sh "$INSTALL_DIR"/bin/downloads/*.sh 2>/dev/null || true
+if [ -f "$EXTRACTED_DIR/k.sh" ]; then
+    cp -f "$EXTRACTED_DIR/k.sh" "$INSTALL_DIR/k.sh"
+fi
+chmod +x "$INSTALL_DIR/run.sh" "$INSTALL_DIR/k.sh" "$INSTALL_DIR"/bin/*.sh "$INSTALL_DIR"/bin/downloads/*.sh 2>/dev/null || true
 echo "Installation successful."
 
 echo "Creating version file..."
@@ -90,3 +93,4 @@ echo "Cleaning up..."
 rm -rf "$EXTRACTED_DIR"
 
 echo "KindleFetch installation completed successfully. Version: $VERSION"
+echo "Command server: sh /mnt/us/extensions/kindlefetch/k.sh"
