@@ -23,6 +23,7 @@ REPO_URL="https://github.com/${KF_REPO_SLUG}/archive/refs/heads/${KF_REPO_BRANCH
 ZIP_FILE="/mnt/us/repo.zip"
 EXTRACTED_DIR="/mnt/us/${KF_REPO_NAME}-${KF_REPO_BRANCH}"
 INSTALL_DIR="/mnt/us/extensions/kindlefetch"
+KOREADER_PLUGIN_DIR="/mnt/us/koreader/plugins/kindlefetch.koplugin"
 CONFIG_FILE="$INSTALL_DIR/bin/kindlefetch_config"
 TEMP_CONFIG="/mnt/us/kindlefetch_config"
 ZLIB_COOKIES_FILE="$INSTALL_DIR/bin/zlib_cookies.txt"
@@ -73,6 +74,14 @@ if [ -f "$EXTRACTED_DIR/k.sh" ]; then
 fi
 chmod +x "$INSTALL_DIR/run.sh" "$INSTALL_DIR/k.sh" "$INSTALL_DIR"/bin/*.sh "$INSTALL_DIR"/bin/downloads/*.sh 2>/dev/null || true
 echo "Installation successful."
+
+if [ -d "/mnt/us/koreader/plugins" ] && [ -d "$INSTALL_DIR/koreader/kindlefetch.koplugin" ]; then
+    echo "Installing KOReader plugin..."
+    rm -rf "$KOREADER_PLUGIN_DIR"
+    mkdir -p "$KOREADER_PLUGIN_DIR"
+    cp -f "$INSTALL_DIR/koreader/kindlefetch.koplugin"/* "$KOREADER_PLUGIN_DIR/"
+    echo "KOReader plugin installed."
+fi
 
 echo "Creating version file..."
 VERSION=$(get_version)

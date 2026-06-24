@@ -65,5 +65,15 @@ Useful commands:
 If your Kindle IP changes:
 
 ```bash
-KINDLE_HOST=192.168.4.75 ./kindlefetch-mac.sh download "win"
+KINDLE_HOST=192.168.4.78 ./kindlefetch-mac.sh download "win"
 ```
+
+## KOReader Plugin
+
+If KOReader is installed, the installer also adds a KindleFetch plugin to KOReader:
+
+```text
+KOReader menu -> More tools -> KindleFetch
+```
+
+The plugin searches with the same LibGen backend, shows the numbered results, and downloads the chosen book into Kindle storage.
