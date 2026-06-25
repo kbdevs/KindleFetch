@@ -2,10 +2,10 @@
 
 set -eu
 
-KINDLE_HOST="${KINDLE_HOST:-192.168.4.78}"
+KINDLE_HOST="${KINDLE_HOST:-192.168.4.84}"
 KINDLE_PORT="${KINDLE_PORT:-2222}"
 KINDLE_USER="${KINDLE_USER:-root}"
-KINDLE_KEY="${KINDLE_KEY:-/tmp/kindlefetch_ssh_key}"
+KINDLE_KEY="${KINDLE_KEY:-$HOME/.ssh/kindlefetch_ed25519}"
 REMOTE_BIN="/mnt/us/extensions/kindlefetch/bin"
 SSH_OPTS="-i $KINDLE_KEY -p $KINDLE_PORT -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/kindlefetch_known_hosts"
 

@@ -2,7 +2,7 @@
 
 set -u
 
-KINDLE_HOST="${KINDLE_HOST:-192.168.4.78}"
+KINDLE_HOST="${KINDLE_HOST:-192.168.4.84}"
 KINDLE_PORT="${KINDLE_PORT:-2222}"
 KINDLE_USER="${KINDLE_USER:-root}"
 KINDLE_KEY="${KINDLE_KEY:-$HOME/.ssh/kindlefetch_ed25519}"
@@ -27,7 +27,7 @@ Defaults:
   KINDLE_KEY=$KINDLE_KEY
 
 Override example:
-  KINDLE_HOST=192.168.4.78 ./kindlefetch-mac.sh download "win"
+  KINDLE_HOST=192.168.4.84 ./kindlefetch-mac.sh download "win"
 EOF
 }
 
