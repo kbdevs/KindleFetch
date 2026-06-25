@@ -2,6 +2,7 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local UIManager = require("ui/uimanager")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
+local TextViewer = require("ui/widget/textviewer")
 local _ = require("gettext")
 
 local KindleFetch = WidgetContainer:extend{
@@ -85,11 +86,42 @@ function KindleFetch:runSearch(query)
     if output == "" then
         output = _("No output from KindleFetch.")
     end
-    UIManager:show(InfoMessage:new{
+    self:showResults(output)
+end
+
+function KindleFetch:showResults(output)
+    local viewer
+    viewer = TextViewer:new{
+        title = _("KindleFetch results"),
+        title_multilines = true,
         text = output,
-        timeout = 0,
-    })
-    self:showDownloadDialog()
+        text_type = "code",
+        buttons_table = {
+            {
+                {
+                    text = _("New search"),
+                    callback = function()
+                        UIManager:close(viewer)
+                        self:showSearchDialog()
+                    end,
+                },
+                {
+                    text = _("Download"),
+                    callback = function()
+                        UIManager:close(viewer)
+                        self:showDownloadDialog()
+                    end,
+                },
+                {
+                    text = _("Close"),
+                    callback = function()
+                        UIManager:close(viewer)
+                    end,
+                },
+            },
+        },
+    }
+    UIManager:show(viewer)
 end
 
 function KindleFetch:showDownloadDialog()
